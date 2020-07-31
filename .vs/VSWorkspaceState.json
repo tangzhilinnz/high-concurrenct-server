@@ -1,0 +1,14 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\app",
+    "\\logic",
+    "\\misc",
+    "\\net",
+    "\\proc",
+    "\\time_wheel",
+    "\\_include"
+  ],
+  "SelectedNode": "\\_include\\ngx_macro.h",
+  "PreviewInSolutionExplorer": false
+}
