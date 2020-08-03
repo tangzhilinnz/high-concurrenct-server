@@ -3,12 +3,11 @@
     "",
     "\\app",
     "\\logic",
+    "\\logs",
     "\\misc",
     "\\net",
-    "\\proc",
-    "\\time_wheel",
     "\\_include"
   ],
-  "SelectedNode": "\\_include\\ngx_macro.h",
+  "SelectedNode": "\\app\\nginx.cpp",
   "PreviewInSolutionExplorer": false
 }

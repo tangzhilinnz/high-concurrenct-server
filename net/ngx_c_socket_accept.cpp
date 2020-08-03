@@ -214,6 +214,12 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         }
         */
 
+        if (m_ifkickTimeCount == 1)
+        {
+            newc->timerEntryPing = timeWheel.CreateTimer(
+                PingTimeout, newc, m_iWaitTime, 0);
+        }
+
         break;  //一般就是循环一次就跳出去
 
     } while (1);

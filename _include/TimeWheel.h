@@ -8,6 +8,8 @@
 #include <time.h>
 #include <sys/time.h>
 
+#include "ngx_func.h"
+
 typedef char int8;
 typedef unsigned char uint8;
 typedef uint8 byte;
@@ -43,6 +45,7 @@ struct TIMER_NODE
     uint32 uPeriod;           // 定时器触发后，再次触发的间隔时长。如果为 0，表示该定时器为一次性的
     void (*timerFn)(void*);   // 定时器回调函数
     void* pParam;             // 回调函数的参数
+    uint32 isEffective;       // 是否挂在时间轮上，1 已挂上，有效状态；0 未挂上，无效状态
 };
 
 class TimeWheel
@@ -50,7 +53,7 @@ class TimeWheel
 public:
     //构造函数，析构函数
     TimeWheel() : thread_((pthread_t)0), uJiffies_(0) {}
-    virtual ~TimeWheel() {}
+    virtual ~TimeWheel() { DestroyTimeWheel(); }
 
 //private:
     static uint32 init_;
@@ -88,6 +91,7 @@ public:
         uint32 uDueTime,        //uDueTime 首次触发的超时时间间隔
         uint32 uPeriod);        //uPeriod 定时器循环周期，若为0，则该定时器只运行一次
 
+    int32 InvalidateTimer(TIMER_NODE* lpTimer); //让定时器失效，但不删除
     int32 DeleteTimer(TIMER_NODE* lpTimer);  //删除定时器
 
 private:
@@ -117,6 +121,24 @@ private:
 
 private:
     static void* ThreadRunTimer(void* pParam); // 计时器线程，以 1 毫秒为单位进行计时
+
+    class TimeWheelMutex //对互斥量进行加锁
+    {
+    public:
+        explicit TimeWheelMutex(pthread_mutex_t* pMutex)
+        {
+            m_pMutex = pMutex;
+            pthread_mutex_lock(m_pMutex);
+        }
+        ~TimeWheelMutex()
+        {
+            pthread_mutex_unlock(m_pMutex);
+        }
+    private:
+        pthread_mutex_t* m_pMutex;
+    };
+
+#define TimeWheelMutex(x) error "Missing guard object name"
 };
 
 

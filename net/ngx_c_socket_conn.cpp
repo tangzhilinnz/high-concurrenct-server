@@ -35,12 +35,12 @@ ngx_connection_s::ngx_connection_s()
         ngx_log_stderr(err, "In ngx_connection_s::ngx_connection_s(), "
             "pthread_mutex_init(&logicPorcMutex) failed!.");
     }
-    err = pthread_mutex_init(&recyConnMutex, NULL); //互斥量初始化
-    if (err != 0)
-    {
-        ngx_log_stderr(err, "In ngx_connection_s::ngx_connection_s(), "
-            "pthread_mutex_init(&recyConnMutex) failed!.");
-    }
+    //err = pthread_mutex_init(&recyConnMutex, NULL); //互斥量初始化
+    //if (err != 0)
+    //{
+    //    ngx_log_stderr(err, "In ngx_connection_s::ngx_connection_s(), "
+    //        "pthread_mutex_init(&recyConnMutex) failed!.");
+    //}
 }
 
 //析构函数只做了一件事，释放该连接对象的互斥量成员
@@ -52,6 +52,11 @@ ngx_connection_s::~ngx_connection_s()
         ngx_log_stderr(err, "In ngx_connection_s::~ngx_connection_s(), "
             "pthread_mutex_destroy(&logicPorcMutex) failed!.");
     }
+    //err = pthread_mutex_destroy(&recyConnMutex); //互斥量释放
+    //{
+    //    ngx_log_stderr(err, "In ngx_connection_s::~ngx_connection_s(), "
+    //        "pthread_mutex_destroy(&recyConnMutex) failed!.");
+    //}
 }
 
 //分配出去一个连接的时候初始化一些内容，原来放在ngx_get_connection里做
@@ -75,7 +80,9 @@ ngx_connection_s::GetOneToUse()
     sendCount = 0;
     sendBufFull = 0;
 
-    timerEntry = NULL;
+    timerEntryRecy = NULL;
+    timerEntryPing = NULL;
+    timerStatus = 0;
 
     /*recvdMsgCount = 0;*/               //收到的消息数刚开始为零      
     /*sentMsgCount = 0; */               //发送的消息数刚开始为零
@@ -124,7 +131,10 @@ ngx_connection_s::PutOneToFree()
         psendMemPointer = NULL;
     } 
 
-    timerEntry = NULL;
+    timeWheel.DeleteTimer(timerEntryRecy);
+    timeWheel.DeleteTimer(timerEntryPing);
+    timerEntryRecy = NULL;
+    timerEntryPing = NULL;
     //=============================================================================================
 }
 
@@ -152,6 +162,7 @@ CSocket::initconnection()
                                                  //释放则显式调用析构函数
                                                  //p_Conn->~ngx_connection_t		
         p_Conn->GetOneToUse();
+        //p_Conn->pCSoket = this;
         m_connectionList.push_back(p_Conn);     //所有连接[不管是否空闲]都放在这个list
         m_freeconnectionList.push_back(p_Conn); //空闲连接会放在这个list
     } 
@@ -293,159 +304,190 @@ CSocket::ngx_recycle_connection(lpngx_connection_t pConn)
     //std::list<lpngx_connection_t>::iterator pos;
     //CLock lock(&recyConnMutex); //针对连接回收列表的互斥量，因为在主线程中会
                                       //调用这个函数，操作这个连接回收列表；辅助线
-                                      //程ServerRecyConnectionThread也要操作这个
+                                      //程ServerRecyConnThread也要操作这个
                                       //连接回收列表
-    CLock lock(&pConn->recyConnMutex);
-    //防止连接被多次扔到回收站中来
-    //for (pos = m_recyconnectionList.begin(); pos != m_recyconnectionList.end(); ++pos)
+
+    //CLock lock(&pConn->recyConnMutex);
+    ////防止连接中的socket_id被重复关闭
+    //if (pConn->fd != -1)
     //{
-    //    if ((*pos) == pConn)
+    //    if (close(pConn->fd) == -1) 
     //    {
-    //        return;
+    //        ngx_log_error_core(NGX_LOG_ALERT, errno,
+    //            "In CSocket::ngx_recycle_connection, func close(%d) failed!",
+    //            pConn->fd);
     //    }
+    //    pConn->fd = -1; //官方nginx这么写，这么写有意义
+    //}
+    //else return;
+    //++pConn->iCurrsequence;
+    //if (/*pConn->timerEntry == NULL*/m_ifkickTimeCount == 0)
+    //{
+    //    pConn->timerEntryRecy =  timeWheel.CreateTimer(
+    //        FreeConnToList, pConn, m_RecyConnectionWaitTime, 0);
+    //}
+    ////pConn->timerEntry != NULL indicates that this pConn has been put in the time wheel
+    //else if (m_ifkickTimeCount == 1)
+    //{
+    //    timeWheel.DeleteTimer(pConn->timerEntryPing);
+    //    pConn->timerEntryPing = NULL;
+    //    pConn->timerEntryRecy = timeWheel.CreateTimer(
+    //        FreeConnToList, pConn, m_RecyConnectionWaitTime, 0);
     //}
 
-    //防止连接中的socket_id被重复关闭
-    if (pConn->fd != -1)
-    {
-        if (close(pConn->fd) == -1) 
-        {
-            ngx_log_error_core(NGX_LOG_ALERT, errno,
-                "In CSocket::ngx_recycle_connection, func close(%d) failed!",
-                pConn->fd);
-        }
-        pConn->fd = -1; //官方nginx这么写，这么写有意义
-    }
-    else return;
+    if (pConn == NULL) return;
+    while (__sync_lock_test_and_set(&connLOCK, 1)) //ATOMIC LCOK FOR recyConnQueue
+    { usleep(0); }
 
+    //防止连接中的socket_id被重复关闭
+    if (pConn->fd == -1)
+    {
+        __sync_lock_release(&connLOCK); //release ATOMIC LCOK FOR recyConnQueue
+        return;
+    }
+
+    if (close(pConn->fd) == -1)
+    {
+        ngx_log_error_core(NGX_LOG_ALERT, errno,
+            "In CSocket::ngx_recycle_connection, func close(%d) failed!",
+             pConn->fd);
+    }
+
+    pConn->nextConn = NULL;
+    ++recyConnQueue.size2;
+    if (recyConnQueue.tail2 == NULL)
+    {
+        recyConnQueue.head2 = pConn;
+        recyConnQueue.tail2 = pConn;
+    }
+    else
+    {
+        (recyConnQueue.tail2)->nextConn = pConn;
+        recyConnQueue.tail2 = pConn;
+    }
+
+    pConn->fd = -1; //官方nginx这么写，这么写有意义  
     ++pConn->iCurrsequence;
 
-    if (pConn->timerEntry == NULL)
-    {
-        pConn->timerEntry = 
-            timeWheel.CreateTimer(SFreeConnToList, pConn, m_RecyConnectionWaitTime, 0);
-    }
-    //pConn->timerEntry != NULL indicates that this pConn has been put in the time wheel
-    else 
-    {
+    __sync_lock_release(&connLOCK); //release ATOMIC LCOK FOR recyConnQueue
 
+    //将信号量的值+1，这样其他卡在sem_wait的就可以走下去；sem_post是给信号量的值加上
+    //一个1，它是一个原子操作，即同时对同一个信号量做加1操作的两个线程是不会冲突的
+    if (sem_post(&semRecyConnQueue) == -1)
+    {
+        ngx_log_stderr(0, "In CSocket::ngx_recycle_connection, "
+            "func sem_post(&semRecyConnQueue) failed.");
     }
-
-    //pConn->inRecyTime = time(NULL); //记录回收时间
-    //m_recyconnectionList.push_back(pConn); //等待ServerRecyConnectionThread线程处理
-    //++m_recycling_connection_n;            //待释放连接队列大小+1
-    //ngx_log_stderr(0, "CSocket::ngx_recycle_connection() executed, "
-    //    "one pConn is put into m_recyconnectionList.");
 
     return;
 }
 
 //=============================================================================================
 //处理连接回收的线程函数(为CSocket的静态成员)
-void* 
-CSocket::ServerRecyConnectionThread(void* threadData)
-{
-    ThreadItem* pThread = static_cast<ThreadItem*>(threadData);
-    CSocket* pSocketObj = pThread->_pThis;
-
-    time_t currtime;
-    int err;
-    std::list<lpngx_connection_t>::iterator pos, pos2, posend;
-    lpngx_connection_t p_Conn;
-
-    while (1)
-    {
-        //为简化问题，我们直接每次休息200毫秒
-        usleep(200 * 1000);
-
-        //不管啥情况，先把这个条件成立时该做的动作做了
-        if (pSocketObj->m_recycling_connection_n > 0)
-        {
-            currtime = time(NULL);
-
-            err = pthread_mutex_lock(&pSocketObj->recyConnMutex);
-            if (err != 0)
-            {
-                ngx_log_stderr(err,
-                    "In CSocket::ServerRecyConnectionThread, pthread_mutex_lock"
-                    "(&recyConnMutex) failed, errno is %d!", err);
-            }
-
-            pos = pSocketObj->m_recyconnectionList.begin();
-            posend = pSocketObj->m_recyconnectionList.end();
-            while (pos != posend)
-            {
-                p_Conn = (*pos);
-                //没到释放的时间，如果系统不退出，continue，否则就得要强制释放
-                if ((p_Conn->inRecyTime + pSocketObj->m_RecyConnectionWaitTime) > currtime
-                    && g_stopEvent == 0)
-                {
-                    pos++;
-                    continue; //没到释放的时间
-                }
-
-                //这将来可能还要做一些是否能释放的判断[在我们写完发送数据代码之后]
-                //... ... ... ...
-
-                //流程走到这里，表示可以释放，那我们就开始释放
-                pos2 = pos;
-                pos++;
-                --pSocketObj->m_recycling_connection_n; //待释放连接队列大小-1
-                pSocketObj->m_recyconnectionList.erase(pos2);
-                ngx_log_stderr(0, "In CSocket::ServerRecyConnectionThread, "
-                    "connection for [%s] is reclaimed to m_freeconnectionList.",
-                    p_Conn->addr_text);
-                //归还参数pConn所代表的连接到空闲连接列表
-                pSocketObj->ngx_free_connection(p_Conn);
-            }
-
-            err = pthread_mutex_unlock(&pSocketObj->recyConnMutex);
-            if (err != 0)
-            {
-                ngx_log_stderr(err, "In CSocket::ServerRecyConnectionThread, "
-                    "pthread_mutex_unlock(&recyConnMutex) failed, "
-                    "errno is %d!", err);
-            }
-        } 
-
-        if (g_stopEvent == 1) //要退出整个程序，那么肯定要先退出这个循环
-        {
-
-            //因为要退出，所以就得硬释放了，不管到没到时间，不管有没有其他不允许
-            //释放的需求，都得硬释放
-            err = pthread_mutex_lock(&pSocketObj->recyConnMutex);
-            if (err != 0)
-            {
-                ngx_log_stderr(err, "In CSocket::ServerRecyConnectionThread, "
-                    "pthread_mutex_lock(&recyConnMutex) failed, "
-                    "errno is %d!", err);
-            }
-
-            while (!pSocketObj->m_recyconnectionList.empty())
-            {
-                p_Conn = pSocketObj->m_recyconnectionList.front();
-                pSocketObj->m_recyconnectionList.pop_front();
-                //归还参数pConn所代表的连接到空闲连接列表
-                pSocketObj->ngx_free_connection(p_Conn);
-                --pSocketObj->m_recycling_connection_n; //待释放连接队列大小-1
-            }
-
-            err = pthread_mutex_unlock(&pSocketObj->recyConnMutex);
-            if (err != 0)
-                ngx_log_stderr(err, "In CSocket::ServerRecyConnectionThread, "
-                    "pthread_mutex_unlock(&recyConnMutex) failed, "
-                    "errno is %d!", err);
-
-            break; //整个程序要退出了，所以break;
-        }
-    }    
-
-    return (void*)0;
-}
+//void* 
+//CSocket::ServerRecyConnThread(void* threadData)
+//{
+//    ThreadItem* pThread = static_cast<ThreadItem*>(threadData);
+//    CSocket* pSocketObj = pThread->_pThis;
+//
+//    time_t currtime;
+//    int err;
+//    std::list<lpngx_connection_t>::iterator pos, pos2, posend;
+//    lpngx_connection_t p_Conn;
+//
+//    while (1)
+//    {
+//        //为简化问题，我们直接每次休息200毫秒
+//        usleep(200 * 1000);
+//
+//        //不管啥情况，先把这个条件成立时该做的动作做了
+//        if (pSocketObj->m_recycling_connection_n > 0)
+//        {
+//            currtime = time(NULL);
+//
+//            err = pthread_mutex_lock(&pSocketObj->recyConnMutex);
+//            if (err != 0)
+//            {
+//                ngx_log_stderr(err,
+//                    "In CSocket::ServerRecyConnThread, pthread_mutex_lock"
+//                    "(&recyConnMutex) failed, errno is %d!", err);
+//            }
+//
+//            pos = pSocketObj->m_recyconnectionList.begin();
+//            posend = pSocketObj->m_recyconnectionList.end();
+//            while (pos != posend)
+//            {
+//                p_Conn = (*pos);
+//                //没到释放的时间，如果系统不退出，continue，否则就得要强制释放
+//                if ((p_Conn->inRecyTime + pSocketObj->m_RecyConnectionWaitTime) > currtime
+//                    && g_stopEvent == 0)
+//                {
+//                    pos++;
+//                    continue; //没到释放的时间
+//                }
+//
+//                //这将来可能还要做一些是否能释放的判断[在我们写完发送数据代码之后]
+//                //... ... ... ...
+//
+//                //流程走到这里，表示可以释放，那我们就开始释放
+//                pos2 = pos;
+//                pos++;
+//                --pSocketObj->m_recycling_connection_n; //待释放连接队列大小-1
+//                pSocketObj->m_recyconnectionList.erase(pos2);
+//                ngx_log_stderr(0, "In CSocket::ServerRecyConnThread, "
+//                    "connection for [%s] is reclaimed to m_freeconnectionList.",
+//                    p_Conn->addr_text);
+//                //归还参数pConn所代表的连接到空闲连接列表
+//                pSocketObj->ngx_free_connection(p_Conn);
+//            }
+//
+//            err = pthread_mutex_unlock(&pSocketObj->recyConnMutex);
+//            if (err != 0)
+//            {
+//                ngx_log_stderr(err, "In CSocket::ServerRecyConnThread, "
+//                    "pthread_mutex_unlock(&recyConnMutex) failed, "
+//                    "errno is %d!", err);
+//            }
+//        } 
+//
+//        if (g_stopEvent == 1) //要退出整个程序，那么肯定要先退出这个循环
+//        {
+//
+//            //因为要退出，所以就得硬释放了，不管到没到时间，不管有没有其他不允许
+//            //释放的需求，都得硬释放
+//            err = pthread_mutex_lock(&pSocketObj->recyConnMutex);
+//            if (err != 0)
+//            {
+//                ngx_log_stderr(err, "In CSocket::ServerRecyConnThread, "
+//                    "pthread_mutex_lock(&recyConnMutex) failed, "
+//                    "errno is %d!", err);
+//            }
+//
+//            while (!pSocketObj->m_recyconnectionList.empty())
+//            {
+//                p_Conn = pSocketObj->m_recyconnectionList.front();
+//                pSocketObj->m_recyconnectionList.pop_front();
+//                //归还参数pConn所代表的连接到空闲连接列表
+//                pSocketObj->ngx_free_connection(p_Conn);
+//                --pSocketObj->m_recycling_connection_n; //待释放连接队列大小-1
+//            }
+//
+//            err = pthread_mutex_unlock(&pSocketObj->recyConnMutex);
+//            if (err != 0)
+//                ngx_log_stderr(err, "In CSocket::ServerRecyConnThread, "
+//                    "pthread_mutex_unlock(&recyConnMutex) failed, "
+//                    "errno is %d!", err);
+//
+//            break; //整个程序要退出了，所以break;
+//        }
+//    }    
+//
+//    return (void*)0;
+//}
 //=============================================================================================
 
 //用户连入，当accept时，得到的socket在处理中产生失败，则资源用这个函数立即释放连接
-//该函数只在worker进程的主线程中调用
+//该函数只在worker进程的主线程中调用，并在加入epoll之前
 void 
 CSocket::ngx_close_connection(lpngx_connection_t pConn)
 {
@@ -460,20 +502,98 @@ CSocket::ngx_close_connection(lpngx_connection_t pConn)
         }
         pConn->fd = -1; //官方nginx这么写，这么写有意义
     }
-    //if (pConn->precvMemPointer != NULL) //若曾给这个连接分配过接收数据的内存，则要释放内存
-    //{
-    //    /*CMemory::GetInstance()->FreeMemory(precvMemPointer);*/
-    //    free(pConn->precvMemPointer);
-    //    pConn->precvMemPointer = NULL;
-    //}
-    //if (pConn->psendMemPointer != NULL) //如果发送数据的缓冲区里有内容，则要释放内存
-    //{
-    //    /*CMemory::GetInstance()->FreeMemory(psendMemPointer);*/
-    //    free(pConn->psendMemPointer);
-    //    pConn->psendMemPointer = NULL;
-    //}
+
     ++pConn->iCurrsequence;
     ngx_free_connection(pConn); 
     return;
 }
 
+
+//=============================================================================================
+//处理连接回收的线程函数(为CSocket的静态成员)
+void* 
+CSocket::ServerRecyConnThread(void* threadData)
+{
+    ThreadItem* pThread = static_cast<ThreadItem*>(threadData);
+    CSocket* pSocketObj = pThread->_pThis;
+
+    int err;
+    lpngx_connection_t pConn;
+
+    while (1)
+    {
+       if (sem_wait(/*&pSocketObj->*/&semRecyConnQueue) == -1)
+       {
+           //sem_wait成功返回0，信号量的值会减去1；
+           //错误的话信号量的值不改动，返回-1，errno设定来标识错误
+           //error type: 
+           //EINTR: The call was interrupted by a signal handler; see signal(7)
+           //EINVAL: m_semEventSendQueue is not a valid semaphores           
+           if (errno != EINTR) //EINTR不算错误
+               ngx_log_stderr(errno, "In CSocekt::ServerRecyConnThread, "
+                   "func sem_wait(&semRecyConnQueue) failed!.");
+       }
+       
+       if (g_stopEvent != 0) //要求整个进程退出
+           break;
+
+       if (/*pSocketObj->*/recyConnQueue.size2 > 0)
+       {
+           while (__sync_lock_test_and_set(/*&pSocketObj->*/&connLOCK, 1))
+           { usleep(0); }
+
+           pConn = /*pSocketObj->*/recyConnQueue.head2;
+           /*pSocketObj->*/recyConnQueue.head2 = NULL;
+           /*pSocketObj->*/recyConnQueue.tail2 = NULL;
+           /*pSocketObj->*/recyConnQueue.size2 = 0;
+
+           __sync_lock_release(/*&pSocketObj->*/&connLOCK);
+
+           while (pConn)
+           {
+               /*if (pSocketObj->m_ifkickTimeCount == 1)
+               {
+                   timeWheel.DeleteTimer(pConn->timerEntryPing);
+                   pConn->timerEntryPing = NULL;
+               }*/
+
+               if (pConn->timerStatus == 0)
+               {
+                   //首先判断是否让心跳包定时器失效，再创建连接的idle定时器
+                   //if (pSocketObj->m_ifkickTimeCount == 1)
+                   timeWheel.InvalidateTimer(pConn->timerEntryPing);
+                   pConn->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
+                       pConn, pSocketObj->m_RecyConnectionWaitTime, 0);
+                   pConn->timerStatus = 1; //将timerStatus置为1，回收状态
+               }
+
+               else if (pConn->timerStatus == 1)
+               {
+                   //直接把连接回收到自由链表
+                   pSocketObj->ngx_free_connection(pConn);
+               }
+
+               pConn = pConn->nextConn; //指向下一个连接
+
+               //if (pSocketObj->m_ifkickTimeCount == 0)
+               //{
+               //    pConn->timerEntryRecy =
+               //        timeWheel.CreateTimer(FreeConnToList, 
+               //            pConn, pSocketObj->m_RecyConnectionWaitTime, 0);
+               //}
+               ////开启PingPong心跳时钟控制，首先关闭PingPong控制器，再开启回收定时器
+               //else if (pSocketObj->m_ifkickTimeCount == 1)
+               //{
+               //    timeWheel.DeleteTimer(pConn->timerEntryPing);
+               //    pConn->timerEntryPing = NULL;
+               //    pConn->timerEntryRecy =
+               //        timeWheel.CreateTimer(FreeConnToList,
+               //            pConn, pSocketObj->m_RecyConnectionWaitTime, 0);
+               //}
+           }
+       }
+    }    
+
+    return (void*)0;
+}
+//=============================================================================================

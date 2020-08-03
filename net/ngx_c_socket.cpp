@@ -23,6 +23,15 @@
 
 int CSocket::recvLOCK = 0;
 int CSocket::sendLOCK = 0;
+int CSocket::connLOCK = 0;
+
+ATOMIC_QUEUE  CSocket::recvMsgQueue;  //must be atomic locked when handling
+ATOMIC_QUEUE  CSocket::sendMsgQueue;  //must be atomic locked when handling
+ATOMIC_QUEUE  CSocket::sendingQueue;  //no need for atomic lock while only 
+                                      //handled by send thread
+ATOMIC_QUEUE2 CSocket::recyConnQueue; //must be atomic locked when handling
+
+sem_t CSocket::semRecyConnQueue;  //the semaphore for handling recyConnQueue
 
 //构造函数
 CSocket::CSocket()
@@ -56,6 +65,10 @@ CSocket::CSocket()
     sendingQueue.head = NULL;
     sendingQueue.tail = NULL;
     sendingQueue.size = 0;
+
+    recyConnQueue.head2 = NULL;
+    recyConnQueue.tail2 = NULL;
+    recyConnQueue.size2 = 0;
     //=============================================================================================
 
     m_total_connection_n = 0;     //连接池总连接数
@@ -85,32 +98,59 @@ CSocket::~CSocket()
 //=============================================================================================
 void CSocket::clearMsgRecvQueue()
 {
-    char* sTmpMempoint;
-    //CMemory* p_memory = CMemory::GetInstance();
+    //char* sTmpMempoint;
+    ////CMemory* p_memory = CMemory::GetInstance();
+    ////临界与否，将来有线程池再考虑临界问题
+    //while (!m_MsgRecvQueue.empty())
+    //{
+    //    sTmpMempoint = m_MsgRecvQueue.front();
+    //    m_MsgRecvQueue.pop_front();
+    //    /*p_memory->FreeMemory(sTmpMempoint);*/
+    //    free(sTmpMempoint);
+    //}
 
-    //临界与否，将来有线程池再考虑临界问题
-    while (!m_MsgRecvQueue.empty())
+    LPSTRUC_MSG_HEADER msg = NULL;
+    while (recvMsgQueue.head) //直接依次释放接收队列中的所有消息
     {
-        sTmpMempoint = m_MsgRecvQueue.front();
-        m_MsgRecvQueue.pop_front();
-        /*p_memory->FreeMemory(sTmpMempoint);*/
-        free(sTmpMempoint);
+        msg = recvMsgQueue.head;
+        recvMsgQueue.head = recvMsgQueue.head->nextMsg;
+        free(msg);
     }
+    recvMsgQueue.tail = NULL;
+    recvMsgQueue.size = 0;
 }
 //=============================================================================================
 //清理TCP发送消息队列
 void CSocket::clearMsgSendQueue()
 {
-    char* sTmpMempoint;
-    //CMemory* p_memory = CMemory::GetInstance();
+    //char* sTmpMempoint;
+    ////CMemory* p_memory = CMemory::GetInstance();
+    //while (!m_MsgSendQueue.empty())
+    //{
+    //    sTmpMempoint = m_MsgSendQueue.front();
+    //    m_MsgSendQueue.pop_front();
+    //    /*p_memory->FreeMemory(sTmpMempoint);*/
+    //    free(sTmpMempoint);
+    //}
 
-    while (!m_MsgSendQueue.empty())
+    LPSTRUC_MSG_HEADER msg = NULL;
+    while (sendMsgQueue.head) //直接依次释放发送队列中的所有消息
     {
-        sTmpMempoint = m_MsgSendQueue.front();
-        m_MsgSendQueue.pop_front();
-        /*p_memory->FreeMemory(sTmpMempoint);*/
-        free(sTmpMempoint);
+        msg = sendMsgQueue.head;
+        sendMsgQueue.head = sendMsgQueue.head->nextMsg;
+        free(msg);
     }
+    sendMsgQueue.tail = NULL;
+    sendMsgQueue.size = 0;
+
+    while (sendingQueue.head) //直接依次释放正在发送队列中的所有消息
+    {
+        msg = sendingQueue.head;
+        sendingQueue.head = sendingQueue.head->nextMsg;
+        free(msg);
+    }
+    sendingQueue.tail = NULL;
+    sendingQueue.size = 0;
 }
 //=============================================================================================
 
@@ -172,11 +212,19 @@ CSocket::Initialize_subproc()
     //但这里用信号量实现则更容易理解，更容易简化问题，使用书写的代码短小且清晰；
     //第二个参数=0，表示信号量在线程之间共享，如果非0，表示在进程之间共享
     //第三个参数=0，表示信号量的初始值，为0时，调用sem_wait()就会卡在那里卡着
-    if (sem_init(&m_semEventSendQueue, 0, 0) == -1)
+    /*if (sem_init(&m_semEventSendQueue, 0, 0) == -1)
     {
         ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
             "sem_init(&m_semEventSendQueue) failed!");
         return false;
+    }*/
+
+    if (sem_init(&semRecyConnQueue, 0, 0) == -1)
+    {
+        ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
+            "sem_init(&m_semEventSendQueue) failed!");
+        return false;
+
     }
     //=============================================================================================
 
@@ -192,16 +240,16 @@ CSocket::Initialize_subproc()
         return false;
     }
 
-    //ThreadItem* pRecyconn;      //专门用来回收连接的线程
-    //m_threadVector.push_back(pRecyconn = new ThreadItem(this));
-    //err = pthread_create(&pRecyconn->_Handle, NULL, 
-    //    ServerRecyConnectionThread, pRecyconn);
-    //if (err != 0)
-    //{
-    //    ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
-    //        "func pthread_create_2 failed!");
-    //    return false;
-    //}
+    ThreadItem* pRecyConn;      //专门用来回收连接的线程
+    m_threadVector.push_back(pRecyConn = new ThreadItem(this));
+    err = pthread_create(&pRecyConn->_Handle, NULL,
+        ServerRecyConnThread, pRecyConn);
+    if (err != 0)
+    {
+        ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
+            "func pthread_create_2 failed!");
+        return false;
+    }
 
     return true;
 }
@@ -213,10 +261,16 @@ CSocket::Shutdown_subproc()
     //(1)把干活线程停止掉，注意系统应该尝试通过设置g_stopEvent = 1来启动整个项目停止
     //用到信号量sem_post的，可能还需要调用一下sem_post
     g_stopEvent = 1;
-    if (sem_post(&m_semEventSendQueue) == -1)  //让ServerSendQueueThread线程运行
+    //if (sem_post(&m_semEventSendQueue) == -1)  //让ServerSendQueueThread线程运行
+    //{
+    //    ngx_log_stderr(0, "In CSocekt::Shutdown_subproc, "
+    //        "func sem_post(&m_semEventSendQueue) failed!");
+    //}
+
+    if (sem_post(&semRecyConnQueue) == -1)  //让ServerRecyConnThread线程运行
     {
         ngx_log_stderr(0, "In CSocekt::Shutdown_subproc, "
-            "func sem_post(&m_semEventSendQueue) failed!");
+            "func sem_post(&semRecyConnQueue) failed!");
     }
 
     std::vector<ThreadItem*>::iterator iter;
@@ -269,10 +323,15 @@ CSocket::Shutdown_subproc()
             "pthread_mutex_destroy(&recyConnMutex) failed!");
     }
     //=============================================================================================
-    if (sem_destroy(&m_semEventSendQueue) == -1)            //发消息相关线程信号量释放
+    //if (sem_destroy(&m_semEventSendQueue) == -1)            //发消息相关线程信号量释放
+    //{
+    //    ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
+    //        "sem_destroy(&m_semEventSendQueue) failed!");
+    //}
+    if (sem_destroy(&semRecyConnQueue) == -1)
     {
         ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
-            "sem_destroy(&m_semEventSendQueue) failed!");
+            "sem_destroy(&semRecyConnQueue) failed!");
     }
     //=============================================================================================
 }
@@ -289,7 +348,13 @@ CSocket::ReadConf()
     m_RecyConnectionWaitTime = p_config->GetIntDefault(
         "Sock_RecyConnectionWaitTime", 
         m_RecyConnectionWaitTime);              //回收连接等待时间
-  
+
+    //是否开启踢人时钟，1：开启   0：不开启
+    m_ifkickTimeCount = p_config->GetIntDefault("Sock_WaitTimeEnable", 0);
+    //多少秒检测一次是否 心跳超时，只有当Sock_WaitTimeEnable = 1时，本项才有用
+    m_iWaitTime = p_config->GetIntDefault("Sock_MaxWaitTime", m_iWaitTime);                         	
+    m_iWaitTime = (m_iWaitTime > 5000) ? m_iWaitTime : 5000;
+
     return;
 }
 

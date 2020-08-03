@@ -198,7 +198,8 @@ TimeWheel::RunTimer(void)
 
     uJiffies = GetJiffies();
 
-    pthread_mutex_lock(&mutexLock_);
+    //pthread_mutex_lock(&mutexLock_);
+    TimeWheelMutex Lock(&mutexLock_);
 
     while (TIME_AFTER_EQ(uJiffies, uJiffies_))
     {
@@ -221,20 +222,20 @@ TimeWheel::RunTimer(void)
         {
             pTmr = (TIMER_NODE*)((uint8*)pListTmrExpire - offsetof(TIMER_NODE, ltTimer));
             pListTmrExpire = pListTmrExpire->pNext;
-            pTmr->timerFn(pTmr->pParam);
+            pTmr->timerFn(pTmr->pParam); //回调函数必须包含对自身TIMER_NODE* 置 NULL
 
             if (pTmr->uPeriod != 0)
             {
                 pTmr->uExpires = uJiffies_ + pTmr->uPeriod;
                 AddTimer(pTmr);
             }
-            else free(pTmr);
+            else /*free(pTmr)*/ pTmr->isEffective = 0; //定时器失效，但不删除
         }
 
         uJiffies_++;
     }
 
-    pthread_mutex_unlock(&mutexLock_);
+    //pthread_mutex_unlock(&mutexLock_);
 }
 
 // 计时器线程，以 1 毫秒为单位进行计时
@@ -277,8 +278,8 @@ TimeWheel::CreateTimeWheel(void)
     int err = pthread_mutex_init(&mutexLock_, NULL);
     if (err != 0)
     {
-        /*ngx_log_stderr(err, "In TimeWheel::CreateTimeWheel, "
-            "func pthread_mutex_init for mutexLock_ failed!");*/
+        ngx_log_stderr(err, "In TimeWheel::CreateTimeWheel, "
+            "func pthread_mutex_init for mutexLock_ failed!");
         return false;
     }
 
@@ -298,8 +299,8 @@ TimeWheel::CreateTimeWheel(void)
     if (err != 0)
     {
         //创建线程有错
-        /*ngx_log_stderr(err, "In TimeWheel::CreateTimeWheel, "
-            "func pthread_create failed to create TimeWheel thread!";*/
+        ngx_log_stderr(err, "In TimeWheel::CreateTimeWheel, "
+            "func pthread_create failed to create TimeWheel thread!");
         return false;
     }
 
@@ -347,16 +348,18 @@ TimeWheel::CreateTimer(
     if (NULL == timerFn || init_ == 0) return NULL;
 
     pTmr = (TIMER_NODE*)malloc(sizeof(TIMER_NODE));
+
     if (pTmr != NULL)
     {
         pTmr->uPeriod = uPeriod;
         pTmr->timerFn = timerFn;
         pTmr->pParam = pParam;
 
-        pthread_mutex_lock(&mutexLock_);
+        TimeWheelMutex Lock(&mutexLock_);
+        
         pTmr->uExpires = uJiffies_ + uDueTime;
+        pTmr->isEffective = 1;
         AddTimer(pTmr);
-        pthread_mutex_unlock(&mutexLock_);
     }
 
     return pTmr;
@@ -373,23 +376,49 @@ TimeWheel::ModifyTimer(
 {
     LIST_TIMER* pListTmr;
     //TIMER_NODE* pTmr;
+    if (NULL == lpTimer || NULL == timerFn || init_ == 0) return -1;
 
-    if (init_ == 1 && NULL != lpTimer)
+    TimeWheelMutex Lock(&mutexLock_);
+
+    if (1 == lpTimer->isEffective) //该定时器在时间轮上，有效状态
     {
-        pthread_mutex_lock(&mutexLock_);
         lpTimer->uPeriod = uPeriod;
         lpTimer->timerFn = timerFn;
         lpTimer->pParam = pParam;
         pListTmr = &lpTimer->ltTimer;
+        //=========================从时间轮上取下定时器，再重新加入=========================
         pListTmr->pPrev->pNext = pListTmr->pNext;
         pListTmr->pNext->pPrev = pListTmr->pPrev;
         lpTimer->uExpires = uJiffies_ + uDueTime;
         AddTimer(lpTimer);
-        pthread_mutex_unlock(&mutexLock_);
+        //=========================从时间轮上取下定时器，再重新加入=========================
         return 0;
     }
-    else
+    else //该定时器不在时间轮上，是无效状态，不能修改，直接退出
+    {
         return -1;
+    }
+}
+
+//让定时器失效，但不删除
+int32
+TimeWheel::InvalidateTimer(TIMER_NODE* lpTimer)
+{
+    LIST_TIMER* pListTmr;
+
+    if (init_ == 0 || NULL == lpTimer) return -1;
+
+    TimeWheelMutex Lock(&mutexLock_);
+    //若该定时器在时间轮上，有效状态，需从时间轮上取下来让其失效
+    if (1 == lpTimer->isEffective)
+    {
+        pListTmr = &lpTimer->ltTimer;
+        pListTmr->pPrev->pNext = pListTmr->pNext;
+        pListTmr->pNext->pPrev = pListTmr->pPrev;
+        lpTimer->isEffective = 0;
+    }
+    //该定时器不在时间轮上，已经是无效状态，则直接返回
+    return 0;  
 }
 
 //删除定时器
@@ -398,16 +427,20 @@ TimeWheel::DeleteTimer(TIMER_NODE* lpTimer)
 {
     LIST_TIMER* pListTmr;
 
-    if (init_ == 1 && NULL != lpTimer)
+    if (init_ == 0 || NULL == lpTimer) return -1;
+
+    TimeWheelMutex Lock(&mutexLock_);
+    //该定时器在时间轮上，有效状态，需从时间轮上取下来，再删除
+    if (1 == lpTimer->isEffective) 
     {
-        pthread_mutex_lock(&mutexLock_);
         pListTmr = &lpTimer->ltTimer;
         pListTmr->pPrev->pNext = pListTmr->pNext;
         pListTmr->pNext->pPrev = pListTmr->pPrev;
         free(lpTimer);
-        pthread_mutex_unlock(&mutexLock_);
-        return 0;
     }
-    else
-        return -1;
+    else //该定时器不在时间轮上，无效状态，直接删除即可
+    {
+        free(lpTimer);
+    }
+    return 0;
 }

@@ -94,7 +94,7 @@ struct ngx_connection_s
 	//=============================================================================================
 
 	//和回收有关--------------------------------------------------------------------------
-	time_t           inRecyTime;         //入到连接资源回收队列里去的时间
+	//time_t           inRecyTime;         //入到连接资源回收队列里去的时间
 
 	//和心跳包有关------------------------------------------------------------------------
 	time_t           lastPingTime;       //上次发送心跳包的时间
@@ -105,8 +105,11 @@ struct ngx_connection_s
 	int              sendCount;          //该连接在发送队列中有的数据条目数，若client只发不收，
 	                                     //则可能造成此数过大，依据此数做出踢出处理
 	//和定时器有关------------------------------------------------------------------------
-	TIMER_NODE*      timerEntry;
-	pthread_mutex_t  recyConnMutex;
+	//CSocket*         pCSoket;
+	TIMER_NODE*      timerEntryRecy;
+	TIMER_NODE*      timerEntryPing;
+	int              timerStatus; // 0 进入idle状态；1 进入回收状态，直接回收到自由链表
+	//pthread_mutex_t  recyConnMutex;
 	//-----------------------------------------------------------------------------------
 	lpngx_connection_t   nextConn;       //这是个指针，等价于传统链表里的next成员：
 										 //后继指针，指向下一个本类型对象，用于把空
@@ -124,12 +127,19 @@ typedef struct _STRUC_MSG_HEADER
 									  //将来用于比较是否连接已经作废
 }STRUC_MSG_HEADER, *LPSTRUC_MSG_HEADER;
 
-struct ATOMIC_QUEUE
+struct ATOMIC_QUEUE //for handling messages
 {
 	LPSTRUC_MSG_HEADER head;
 	LPSTRUC_MSG_HEADER tail;
 	int size;
 	//int atomicLock;
+};
+
+struct ATOMIC_QUEUE2 //for handing connections
+{
+	lpngx_connection_t head2;
+	lpngx_connection_t tail2;
+	int size2;
 };
 
 //socket相关类
@@ -239,12 +249,14 @@ private:
 	void clearAllFromTimerQueue();                                        
 
 	//定时器专用函数
-	static void SFreeConnToList(void* pConnVoid);
+	static void SetConnToIdle(void* pConnVoid);
+	static void PingTimeout(void* pConnVoid);
+
 	//线程相关函数(静态函数)
 	//专门用来发送数据的线程
 	static void* ServerSendQueueThread(void* threadData);
 	//专门用来回收连接的线程
-	static void* ServerRecyConnectionThread(void* threadData);
+	static void* ServerRecyConnThread(void* threadData);
 	//时间队列监视线程，处理到期不发心跳包的用户踢出的线程
 	static void* ServerTimerQueueMonitorThread(void* threadData);         
 
@@ -317,14 +329,18 @@ private:
 
 	//=============================================================================================
 public:
-	ATOMIC_QUEUE      recvMsgQueue; //must be atomic locked when handling
-	ATOMIC_QUEUE      sendMsgQueue; //must be atomic locked when handling
-	ATOMIC_QUEUE      sendingQueue; //no need for atomic lock while only 
+	static ATOMIC_QUEUE  recvMsgQueue; //must be atomic locked when handling
+	static ATOMIC_QUEUE  sendMsgQueue; //must be atomic locked when handling
+	static ATOMIC_QUEUE  sendingQueue; //no need for atomic lock while only 
 									//handled by send thread
 
-	static int        recvLOCK;
-	static int        sendLOCK;
-	volatile sem_t    speedUp[5];
+	static int        recvLOCK;     //atomic lock variable
+	static int        sendLOCK;		//atomic lock variable	
+	//volatile sem_t    speedUp[5];
+
+	static ATOMIC_QUEUE2 recyConnQueue; //must be atomic locked when handling
+	static int           connLOCK;		 //atomic lock variable
+	static sem_t		 semRecyConnQueue; //the semaphore for handling recyConnQueue
 	//=============================================================================================
 };
 
