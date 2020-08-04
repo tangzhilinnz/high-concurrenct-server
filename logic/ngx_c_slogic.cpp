@@ -35,8 +35,8 @@ typedef bool (CLogicSocket::*handler)(
 //用来保存成员函数指针的数组
 static const handler statusHandler[] = 
 {
-    //数组前5个元素，保留，以备将来增加一些基本服务器功能
-    NULL,                           //【0】：下标从0开始
+    //数组前5个元素，保留，以备将来增加一些基本服务器功能  
+    &CLogicSocket::_HandlePing,    //【0】：下标从0开始
     NULL,                           //【1】：下标从0开始
     NULL,                           //【2】：下标从0开始
     NULL,                           //【3】：下标从0开始
@@ -162,8 +162,8 @@ CLogicSocket::threadRecvProcFunc(char* pMsgBuf)
 
     //一切正确，可以放心大胆的处理了
     //(3)调用消息码对应的成员函数来处理
-    (this->*statusHandler[imsgCode])
-        (p_Conn, pMsgHeader, (char*)pPkgBody, pkglen - lenPkgHeader);
+    (this->*statusHandler[imsgCode])(p_Conn, pMsgHeader, (char*)pPkgBody,
+        pkglen - lenPkgHeader/*message body length*/);
 
     return;
 
@@ -454,4 +454,54 @@ CLogicSocket::_HandleTest(
 
     //ngx_log_stderr(0, "CLogicSocket::_HandleTest executed!");
     return true;
+}
+
+//接收并处理客户端发送过来的ping包
+bool 
+CLogicSocket::_HandlePing(
+    lpngx_connection_t pConn, 
+    LPSTRUC_MSG_HEADER pMsgHeader, 
+    char* pPkgBody, 
+    unsigned short iBodyLength)
+{
+    //心跳包要求没有包体；
+    if (iBodyLength != 0)  //有包体则认为是 非法包
+        return false;
+
+    //凡是和本用户有关的访问都考虑用互斥，以免该用户同时发送过来两个命令达到各种作弊目的
+    //CLock lock(&pConn->logicPorcMutex);
+
+    timeWheel.ModifyTimer(pConn->timerEntryPing, PingTimeout, pConn, m_iWaitTime, 0);
+
+    //服务器也发送一个只有包头的心跳包给客户端，作为返回的数据
+    SendNoBodyPkgToClient(pMsgHeader, _CMD_PING);
+
+    ngx_log_stderr(0, "receive a heartbeat packet from client[%s] and return one",
+        pConn->addr_text);
+
+    return true;
+}
+
+//发送没有包体的数据包给客户端
+void 
+CLogicSocket::SendNoBodyPkgToClient(LPSTRUC_MSG_HEADER pMsgHeader, 
+    unsigned short iMsgCode)
+{
+    //CMemory* p_memory = CMemory::GetInstance();
+    //char* p_sendbuf = (char*)p_memory->AllocMemory(m_iLenMsgHeader + m_iLenPkgHeader, false);
+    char* p_sendbuf = (char*)malloc(lenMsgHeader + lenPkgHeader);
+    char* p_tmpbuf = p_sendbuf;
+
+    memcpy(p_tmpbuf, pMsgHeader, lenMsgHeader);
+    p_tmpbuf += lenMsgHeader;
+
+    LPCOMM_PKG_HEADER pPkgHeader = (LPCOMM_PKG_HEADER)p_tmpbuf;	  //指向的是我要发送出去的包的包头	
+    pPkgHeader->msgCode = htons(iMsgCode);
+    pPkgHeader->pkgLen = htons(lenPkgHeader);
+    pPkgHeader->crc32 = 0;
+    pPkgHeader->crc32_h = CRC32((unsigned char*)pPkgHeader, lenPkgHeader - sizeof(int));
+    pPkgHeader->crc32_h = htonl(pPkgHeader->crc32_h);
+
+    msgSend(p_sendbuf);
+    return;
 }

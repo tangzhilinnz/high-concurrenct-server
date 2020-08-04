@@ -2,3 +2,6 @@
 /time_wheel
 /memPool
 /logs
+/net/ngx_c_socket_time_abandoned.cpp
+/.vs
+/.vscode

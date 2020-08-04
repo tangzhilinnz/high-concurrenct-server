@@ -90,26 +90,28 @@ ngx_connection_s::GetOneToUse()
     //将前一个连接的ip地址字符串清零
     memset(addr_text, 0, sizeof(addr_text));
 
+    //=============================================================================================
     //允许校验错误包次数初始化
     const char* isOn = p_config->GetString("AbnormalPKGCheck");
     if (isOn == NULL)
     {
-        abnrPKGCheck_admit = 0;
+        wrongPKGAdmit = 0;
     }
     else
     {
         if (strcasecmp(isOn, "ON") == 0)
         {
-            abnrPKGCheck_admit = p_config->GetIntDefault(
+            wrongPKGAdmit = p_config->GetIntDefault(
                 "AbnormalPKGCheck_Admit", 5);
-            abnrPKGCheck_admit = ngx_min(abnrPKGCheck_admit, 30000);
-            abnrPKGCheck_admit = ngx_max(abnrPKGCheck_admit, 5);
+            wrongPKGAdmit = ngx_min(wrongPKGAdmit, 30000);
+            wrongPKGAdmit = ngx_max(wrongPKGAdmit, 5);
         }
         else
         {
-            abnrPKGCheck_admit = 0;
+            wrongPKGAdmit = 0;
         }
     }
+    //=============================================================================================
 }
 
 //回收一个连接，释放这个连接曾今分配的动态内存
@@ -172,6 +174,8 @@ CSocket::initconnection()
     return;
 }
 
+
+//=======================================================================================
 //最终回收连接池，释放内存
 void 
 CSocket::clearconnection()
@@ -205,6 +209,7 @@ CSocket::clearconnection()
     m_free_connection_n = 0;
     m_recycling_connection_n = 0; 
 }
+//=======================================================================================
 
 //从连接池中获取一个空闲连接
 //当一个客户端连接TCP进入，我希望把这个连接和连接池中的一个连接对象绑到一起，后续可以通

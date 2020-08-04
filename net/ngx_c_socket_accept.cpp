@@ -214,7 +214,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         }
         */
 
-        if (m_ifkickTimeCount == 1)
+        if (m_ifkickTimeCount == 1) //若开启心跳包检测，需要创建心跳包ping-pong定时器
         {
             newc->timerEntryPing = timeWheel.CreateTimer(
                 PingTimeout, newc, m_iWaitTime, 0);

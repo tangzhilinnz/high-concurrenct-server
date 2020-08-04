@@ -210,8 +210,8 @@ CSocket::ngx_read_request_handler_PKGcheck(lpngx_connection_t pConn)
     if (calcrc_h != crc32_header) //服务器端根据包头计算crc_h值，和客户端传递
                                   //过来的包头中的crc32_h信息比较
     {
-        //ngx_log_stderr(0, "%d", pConn->abnrPKGCheck_admit);
-        if ((pConn->abnrPKGCheck_admit)-- <= 0)
+        //ngx_log_stderr(0, "%d", pConn->wrongPKGAdmit);
+        if ((pConn->wrongPKGAdmit)-- <= 0)
         {
             ngx_log_stderr(0, "In CSocket::ngx_read_request_handler_PKGcheck, "
                 "the number of packet check failures has exceeded the allowed value, "
@@ -231,6 +231,8 @@ CSocket::ngx_read_request_handler_PKGcheck(lpngx_connection_t pConn)
             }
             pConn->precvbuf = pConn->precvbuf_hstar + lenPkgHeader;
             ++pConn->precvbuf_hstar;
+            ngx_log_stderr(0, "In CSocket::ngx_read_request_handler_PKGcheck, "
+                "a malicious, malformed or error packet is found!");
             return;
         }
 

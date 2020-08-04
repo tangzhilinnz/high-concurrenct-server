@@ -74,7 +74,7 @@ struct ngx_connection_s
 														//precvbuf配套使用
 	char*            precvMemPointer;                   //new出来的用于存放收包的
 														//内存首地址
-	int				 abnrPKGCheck_admit;				//允许校验错误包次数
+	int				 wrongPKGAdmit;				//允许校验错误包次数
 	pthread_mutex_t  logicPorcMutex;                    //逻辑处理相关的互斥量
 
 	//和发包有关--------------------------------------------------------------------------
@@ -93,19 +93,13 @@ struct ngx_connection_s
 											 //的总消息数量(成功发送到send buffer)
 	//=============================================================================================
 
-	//和回收有关--------------------------------------------------------------------------
-	//time_t           inRecyTime;         //入到连接资源回收队列里去的时间
-
-	//和心跳包有关------------------------------------------------------------------------
-	time_t           lastPingTime;       //上次发送心跳包的时间
-
 	//和网络安全有关----------------------------------------------------------------------
 	/*uint64_t         FloodkickLastTime;*/  //Flood攻击上次收到包的时间
 	/*int              FloodAttackCount;*/   //Flood攻击在该时间内收到包的次数统计
 	int              sendCount;          //该连接在发送队列中有的数据条目数，若client只发不收，
 	                                     //则可能造成此数过大，依据此数做出踢出处理
 	//和定时器有关------------------------------------------------------------------------
-	//CSocket*         pCSoket;
+	//1 连接回收 2 心跳包检查
 	TIMER_NODE*      timerEntryRecy;
 	TIMER_NODE*      timerEntryPing;
 	int              timerStatus; // 0 进入idle状态；1 进入回收状态，直接回收到自由链表
@@ -158,10 +152,11 @@ public:
 	//=============================================================================================
 	virtual void threadRecvProcFunc(char* pMsgBuf); //处理客户端请求，虚函数，因为
 													//将来可能写子类继承本类
-	virtual void procPingTimeOutChecking(
-		LPSTRUC_MSG_HEADER tmpmsg, 
-		time_t cur_time);                   //检测心跳包是否超时的事宜，父类本函数
-	                                        //只是把内存释放，子类应重新实现该函数
+	
+	//virtual void procPingTimeOutChecking(
+	//	LPSTRUC_MSG_HEADER tmpmsg, 
+	//	time_t cur_time);                   //检测心跳包是否超时的事宜，父类本函数
+	//                                        //只是把内存释放，子类应重新实现该函数
 
 public:
 	int  ngx_epoll_init(); //epoll功能初始化
@@ -232,25 +227,21 @@ private:
 	void initconnection(); //初始化连接池
 	void clearconnection(); //回收连接池
 
-	//和时间相关的函数
-	//设置踢出时钟(向map表中增加内容)
-	void AddToTimerQueue(lpngx_connection_t pConn);                    
-	//从multimap中取得最早的时间返回去
-	time_t  GetEarliestTime(); 
-	//从m_timeQueuemap移除最早的时间，并把最早这个时间所在的项的值所对应的指针返回，
-	//调用者负责互斥，所以本函数不用互斥
-	LPSTRUC_MSG_HEADER RemoveFirstTimer();    
-	//根据给的当前时间，从m_timeQueuemap找到比这个时间更早的1个节点返回去，
-	//这些节点都是时间超过要处理的节点
-	LPSTRUC_MSG_HEADER GetOverTimeTimer(time_t cur_time);                 
-	//把指定用户tcp连接从timer表中抠出去
-	void DeleteFromTimerQueue(lpngx_connection_t pConn);                  
-	//清理时间队列中所有内容
-	void clearAllFromTimerQueue();                                        
-
-	//定时器专用函数
-	static void SetConnToIdle(void* pConnVoid);
-	static void PingTimeout(void* pConnVoid);
+	////和时间相关的函数
+	////设置踢出时钟(向map表中增加内容)
+	//void AddToTimerQueue(lpngx_connection_t pConn);                    
+	////从multimap中取得最早的时间返回去
+	//time_t  GetEarliestTime(); 
+	////从m_timeQueuemap移除最早的时间，并把最早这个时间所在的项的值所对应的指针返回，
+	////调用者负责互斥，所以本函数不用互斥
+	//LPSTRUC_MSG_HEADER RemoveFirstTimer();    
+	////根据给的当前时间，从m_timeQueuemap找到比这个时间更早的1个节点返回去，
+	////这些节点都是时间超过要处理的节点
+	//LPSTRUC_MSG_HEADER GetOverTimeTimer(time_t cur_time);                 
+	////把指定用户tcp连接从timer表中抠出去
+	//void DeleteFromTimerQueue(lpngx_connection_t pConn);                  
+	////清理时间队列中所有内容
+	//void clearAllFromTimerQueue();                                        
 
 	//线程相关函数(静态函数)
 	//专门用来发送数据的线程
@@ -258,7 +249,7 @@ private:
 	//专门用来回收连接的线程
 	static void* ServerRecyConnThread(void* threadData);
 	//时间队列监视线程，处理到期不发心跳包的用户踢出的线程
-	static void* ServerTimerQueueMonitorThread(void* threadData);         
+	static void* ServerTimerQueueMonitorThread(void* threadData);  
 
 protected:
 	//一些和网络通讯有关的成员变量
@@ -268,6 +259,9 @@ protected:
 
 	int         m_iWaitTime;        //多少秒检测一次心跳超时，
 									//当Sock_WaitTimeEnable=1时，本项才有用
+	//定时器专用函数
+	static void SetConnToIdle(void* pConnVoid);
+	static void PingTimeout(void* pConnVoid);
 
 private:
 	struct ThreadItem
