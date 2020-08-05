@@ -230,6 +230,11 @@ CLogicSocket::_HandleRegister(
 
     //(3)取得了整个发送过来的数据
     LPSTRUCT_REGISTER p_RecvInfo = (LPSTRUCT_REGISTER)pPkgBody;
+    //所有数值型，short，int，long，uint64_t，int64_t，收到后网络转主机序
+    p_RecvInfo->iType = ntohl(p_RecvInfo->iType); 
+    //这非常关键，防止客户端发送过来畸形包，导致服务器直接使用这个数据出现错误
+    p_RecvInfo->username[sizeof(p_RecvInfo->username) - 1] = 0; 
+    p_RecvInfo->password[sizeof(p_RecvInfo->password) - 1] = 0;
 
     //(4)这里可能要考虑 根据业务逻辑，进一步判断收到的数据的合法性，当前该玩家的状态是
     //否适合收到这个数据等等【比如如果用户没登陆，它就不适合购买物品等等】，这里自己发
@@ -328,6 +333,9 @@ CLogicSocket::_HandleLogIn(
 
     //(3)取得了整个发送过来的数据
     LPSTRUCT_LOGIN p_RecvInfo = (LPSTRUCT_LOGIN)pPkgBody;
+    //这非常关键，防止客户端发送过来畸形包，导致服务器直接使用这个数据出现错误
+    p_RecvInfo->username[sizeof(p_RecvInfo->username) - 1] = 0;
+    p_RecvInfo->password[sizeof(p_RecvInfo->password) - 1] = 0;
 
     //(4)这里可能要考虑 根据业务逻辑，进一步判断收到的数据的合法性，当前该玩家的状态是
     //否适合收到这个数据等等【比如如果用户没登陆，它就不适合购买物品等等】，这里自己发
@@ -410,6 +418,8 @@ CLogicSocket::_HandleTest(
 
     //(3)取得了整个发送过来的数据
     LPSTRUCT_TEST p_RecvInfo = (LPSTRUCT_TEST)pPkgBody;
+    //这非常关键，防止客户端发送过来畸形包，导致服务器直接使用这个数据出现错误
+    p_RecvInfo->username[sizeof(p_RecvInfo->username) - 1] = 0;
 
     //(4)这里可能要考虑 根据业务逻辑，进一步判断收到的数据的合法性，当前该玩家的状态是
     //否适合收到这个数据等等【比如如果用户没登陆，它就不适合购买物品等等】，这里自己发
@@ -471,7 +481,11 @@ CLogicSocket::_HandlePing(
     //凡是和本用户有关的访问都考虑用互斥，以免该用户同时发送过来两个命令达到各种作弊目的
     //CLock lock(&pConn->logicPorcMutex);
 
-    timeWheel.ModifyTimer(pConn->timerEntryPing, PingTimeout, pConn, m_iWaitTime, 0);
+    if (!m_ifTimeOutKick) //当开启超时踢出功能后，心跳机制被屏蔽
+    {
+        timeWheel.ModifyTimer(
+            pConn->timerEntryPing, PingTimeout, pConn, m_iWaitTime, 0);
+    }
 
     //服务器也发送一个只有包头的心跳包给客户端，作为返回的数据
     SendNoBodyPkgToClient(pMsgHeader, _CMD_PING);

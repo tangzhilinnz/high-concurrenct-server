@@ -37,9 +37,9 @@ sem_t CSocket::semRecyConnQueue;  //the semaphore for handling recyConnQueue
 CSocket::CSocket()
 {
     //配置相关
-    m_worker_connections = 1;      //epoll连接最大项数
-    m_ListenPortCount = 2;         //默认监听2个端口
-    m_RecyConnectionWaitTime = 60; //等待这么些秒后才回收连接
+    m_worker_connections = 1;        //epoll连接最大项数
+    m_ListenPortCount = 2;           //默认监听2个端口
+    m_RecyConnectionWaitTime = 5000; //等待这么些秒后才回收连接
 
     //epoll相关
     m_epollhandle = -1;            //epoll返回的句柄
@@ -78,6 +78,8 @@ CSocket::CSocket()
     m_total_connection_n = 0;     //连接池总连接数
     m_free_connection_n = 0;      //连接池空闲连接数
     //m_recycling_connection_n = 0; //待释放连接队列大小
+
+    onlineUserCount = 0;    //在线用户数量统计，先给0
 
     return;
 }
@@ -358,6 +360,8 @@ CSocket::ReadConf()
     //多少秒检测一次是否 心跳超时，只有当Sock_WaitTimeEnable = 1时，本项才有用
     m_iWaitTime = p_config->GetIntDefault("Sock_MaxWaitTime", m_iWaitTime);                         	
     m_iWaitTime = (m_iWaitTime > 5000) ? m_iWaitTime : 5000;
+
+    m_ifTimeOutKick = p_config->GetIntDefault("Sock_TimeOutKick", 0);
 
     return;
 }

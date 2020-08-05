@@ -84,8 +84,8 @@ ngx_connection_s::GetOneToUse()
 
     nextConn = NULL;
 
-    /*recvdMsgCount = 0;*/               //收到的消息数刚开始为零      
-    /*sentMsgCount = 0; */               //发送的消息数刚开始为零
+    //recvdMsgCount = 0;               //收到的消息数刚开始为零      
+    //sentMsgCount = 0;                //发送的消息数刚开始为零
 
     memset(addr_text, 0, sizeof(addr_text)); //将前一个连接的ip地址字符串清零
 
@@ -151,6 +151,7 @@ CSocket::initconnection()
             pConn->GetOneToUse();
             m_connectionList.push_back(pConn);     //所有连接[不管是否空闲]都放在这个list
             m_freeconnectionList.push_back(pConn); //空闲连接会放在这个list
+
             //pConn->nextConn = NULL;
             //if (freeConnList.tail2 == NULL)
             //{
@@ -554,7 +555,7 @@ CSocket::ServerRecyConnThread(void* threadData)
     CSocket* pSocketObj = pThread->_pThis;
 
     int err;
-    lpngx_connection_t pConn/*, pConn1*/;
+    lpngx_connection_t pConn, pConn1;
 
     while (1)
     {
@@ -573,73 +574,75 @@ CSocket::ServerRecyConnThread(void* threadData)
         if (g_stopEvent != 0) //要求整个进程退出
             break;
 
-        //if (/*pSocketObj->*/recyConnQueue.size2 > 0)
+        if (recyConnQueue.size2 > 0)
+        {
+            while (__sync_lock_test_and_set(&connLOCK, 1))
+            { usleep(0); } //ATOMIC LCOK FOR recyConnQueue
+
+            pConn = recyConnQueue.head2;
+            recyConnQueue.head2 = NULL;
+            recyConnQueue.tail2 = NULL;
+            recyConnQueue.size2 = 0;
+
+            //release ATOMIC LCOK FOR recyConnQueue
+            __sync_lock_release(&connLOCK);
+
+            while (pConn)
+            {
+                pConn1 = pConn;
+                pConn = pConn->nextConn; //指向下一个连接
+                if (pConn1->timerStatus == 0)
+                {
+                    //首先让心跳包定时器失效(无论有没有创建，都可以调用)，再创建连接的idle定时器
+                    //if (pSocketObj->m_ifkickTimeCount == 1)
+                    timeWheel.InvalidateTimer(pConn1->timerEntryPing);
+                    pConn1->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
+                        pConn1, pSocketObj->m_RecyConnectionWaitTime, 0);
+                    pConn1->timerStatus = 1; //将timerStatus置为1，回收状态
+                    //===============================test================================
+                    //ngx_log_stderr(0, "pConn->timerStatus == 1");
+                    //===============================test================================
+                    --pSocketObj->onlineUserCount; //连入用户数量-1
+                }
+                else if (pConn1->timerStatus == 1)
+                {
+                    //pConn->timerStatus == 1 为回收状态，直接把连接回收到自由链表
+                    pSocketObj->ngx_free_connection(pConn1);
+                }
+            }
+        }
+
+        //while (__sync_lock_test_and_set(&connLOCK, 1))
+        //{ usleep(0); } //ATOMIC LCOK FOR recyConnQueue
+        //if (recyConnQueue.head2 == NULL)
+        //    pConn = NULL;
+        //else
         //{
-        //    while (__sync_lock_test_and_set(/*&pSocketObj->*/&connLOCK, 1))
-        //    { usleep(0); } //ATOMIC LCOK FOR recyConnQueue
-        //    pConn = /*pSocketObj->*/recyConnQueue.head2;
-        //    /*pSocketObj->*/recyConnQueue.head2 = NULL;
-        //    /*pSocketObj->*/recyConnQueue.tail2 = NULL;
-        //    /*pSocketObj->*/recyConnQueue.size2 = 0;
-        //    release ATOMIC LCOK FOR recyConnQueue
-        //    __sync_lock_release(/*&pSocketObj->*/&connLOCK);
-        //    while (pConn)
+        //    pConn = recyConnQueue.head2;
+        //    recyConnQueue.head2 = (recyConnQueue.head2)->nextConn;
+        //    if (recyConnQueue.head2 == NULL)
+        //        recyConnQueue.tail2 = NULL;
+        //    --recyConnQueue.size2;
+        //}
+        ////release ATOMIC LCOK FOR recyConnQueue
+        //__sync_lock_release(/*&pSocketObj->*/&connLOCK);
+        //if (pConn)
+        //{
+        //    if (pConn->timerStatus == 0)
         //    {
-        //        pConn1 = pConn;
-        //        pConn = pConn->nextConn; //指向下一个连接
-        //        if (pConn1->timerStatus == 0)
-        //        {
-        //            首先判断是否让心跳包定时器失效，再创建连接的idle定时器
-        //            if (pSocketObj->m_ifkickTimeCount == 1)
-        //            timeWheel.InvalidateTimer(pConn1->timerEntryPing);
-        //            pConn1->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
-        //                pConn1, pSocketObj->m_RecyConnectionWaitTime, 0);
-        //            pConn1->timerStatus = 1; //将timerStatus置为1，回收状态
-        //            =======================================test====================================
-        //            ngx_log_stderr(0, "pConn->timerStatus == 1");
-        //            =======================================test====================================
-        //        }
-        //        else if (pConn1->timerStatus == 1)
-        //        {
-        //            直接把连接回收到自由链表
-        //            pSocketObj->ngx_free_connection(pConn1);
-        //        }
+        //        //首先让心跳包定时器失效(无论有没有创建，都可以调用)，再创建连接的idle定时器
+        //        timeWheel.InvalidateTimer(pConn->timerEntryPing);
+        //        pConn->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
+        //            pConn, pSocketObj->m_RecyConnectionWaitTime, 0);
+        //        pConn->timerStatus = 1; //将timerStatus置为1，回收状态
+        //        --pSocketObj->onlineUserCount; //连入用户数量-1
+        //    }
+        //    else if (pConn->timerStatus == 1)
+        //    {
+        //        //pConn->timerStatus == 1 为回收状态，直接把连接回收到自由链表
+        //        pSocketObj->ngx_free_connection(pConn);
         //    }
         //}
-
-        while (__sync_lock_test_and_set(&connLOCK, 1))
-        { usleep(0); } //ATOMIC LCOK FOR recyConnQueue
-
-        if (recyConnQueue.head2 == NULL)
-            pConn = NULL;
-        else
-        {
-            pConn = recyConnQueue.head2;
-            recyConnQueue.head2 = (recyConnQueue.head2)->nextConn;
-            if (recyConnQueue.head2 == NULL)
-                recyConnQueue.tail2 = NULL;
-            --recyConnQueue.size2;
-        }
-
-        //release ATOMIC LCOK FOR recyConnQueue
-        __sync_lock_release(/*&pSocketObj->*/&connLOCK);
-
-        if (pConn)
-        {
-            if (pConn->timerStatus == 0)
-            {
-                //首先让心跳包定时器失效(无论有没有创建，都可以调用)，再创建连接的idle定时器
-                timeWheel.InvalidateTimer(pConn->timerEntryPing);
-                pConn->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
-                    pConn, pSocketObj->m_RecyConnectionWaitTime, 0);
-                pConn->timerStatus = 1; //将timerStatus置为1，回收状态
-            }
-            else if (pConn->timerStatus == 1)
-            {
-                //pConn->timerStatus == 1 为回收状态，直接把连接回收到自由链表
-                pSocketObj->ngx_free_connection(pConn);
-            }
-        }
     }
     return (void*)0;
 }

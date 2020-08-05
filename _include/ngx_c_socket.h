@@ -254,8 +254,10 @@ protected:
 	size_t		lenPkgHeader;	//sizeof(COMM_PKG_HEADER);		
 	size_t      lenMsgHeader;    //sizeof(STRUC_MSG_HEADER);
 
-	int         m_iWaitTime;        //多少秒检测一次心跳超时，
-									//当Sock_WaitTimeEnable=1时，本项才有用
+	int         m_ifTimeOutKick; //当时间到达Sock_MaxWaitTime指定的时间时，直接把客户端踢出去；
+								 //只有当Sock_WaitTimeEnable=1时，本项才有用
+	int         m_iWaitTime;     //多少秒检测一次心跳超时，
+								 //只有当Sock_WaitTimeEnable=1时，本项才有用
 	//定时器专用函数
 	static void SetConnToIdle(void* pConnVoid);
 	static void PingTimeout(void* pConnVoid);
@@ -264,7 +266,7 @@ private:
 	struct ThreadItem
 	{
 		pthread_t   _Handle;	  //线程句柄
-		CSocket* _pThis;       //记录线程池的指针	
+		CSocket*    _pThis;       //记录线程池的指针	
 		bool        ifrunning;    //标记是否正式启动起来，启动起来后，
 								  //才允许调用StopAll()来释放
 		//构造函数
@@ -313,15 +315,17 @@ private:
 	pthread_mutex_t   m_recvMessageQueueMutex; //收消息队列互斥量
 	sem_t             m_semEventSendQueue;     //处理发消息线程相关的信号量
 	//=============================================================================================
-
 	//时间相关
 	int  m_ifkickTimeCount;      //是否开启踢人时钟，1：开启，0：不开启	
 	//=============================================================================================
-public:
+	//当前在线用户数统计相关
+	std::atomic<int>  onlineUserCount;  
+
+public: //一些消息队列和连接队列
 	static ATOMIC_QUEUE  recvMsgQueue; //must be atomic locked when handling
 	static ATOMIC_QUEUE  sendMsgQueue; //must be atomic locked when handling
 	static ATOMIC_QUEUE  sendingQueue; //no need for atomic lock while only 
-									//handled by send thread
+									   //handled by send thread
 
 	static int        recvLOCK;     //atomic lock variable
 	static int        sendLOCK;		//atomic lock variable	

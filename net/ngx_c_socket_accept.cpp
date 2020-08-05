@@ -141,7 +141,18 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
             return;
         }
 
-        //走到这里的，表示accept4/accept成功了        
+        //走到这里的，表示accept4/accept成功了 
+
+        //用户连接数过多，要关闭该用户socket，因为现在也没分配连接，所以直接关闭即可
+        if (onlineUserCount >= 2 * m_worker_connections)
+        {
+            ngx_log_stderr(0,
+                "exceeded the maximum number(%d) of connections allowed by the system, "
+                "connection request failed for socket(%d)!", 2 * m_worker_connections, s);
+            close(s);
+            return;
+        }
+
         ngx_log_stderr(0, "accept(%d) succeeded!", s);  //s这里就是一个句柄了
         newc = ngx_get_connection(s); //这是针对新连入用户的连接，和监听套接字所对应
                                       //的连接是两个不同的socket
@@ -154,10 +165,11 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
                 ngx_log_error_core(NGX_LOG_ALERT, errno, 
                     "In CSocekt::ngx_event_accept, close(%d) failed!", s);
             }
+            ngx_log_stderr(0,
+                "there is no free connection in m_freeconnectionList, "
+                "connection request failed for socket(%d)!", s);
             return;
         }
-
-        //......将来这里会判断是否连接超过最大允许连接数，现在，这里可以不处理
 
         //成功的拿到了连接池中的一个连接
         memcpy(&newc->s_sockaddr, &mysockaddr, socklen); //拷贝客户端地址到连接对象
@@ -230,6 +242,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
                 PingTimeout, newc, m_iWaitTime, 0);
         }
 
+        ++onlineUserCount;  //连入用户数量+1 
         break;  //一般就是循环一次就跳出去
 
     } while (1);
