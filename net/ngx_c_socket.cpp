@@ -69,11 +69,15 @@ CSocket::CSocket()
     recyConnQueue.head2 = NULL;
     recyConnQueue.tail2 = NULL;
     recyConnQueue.size2 = 0;
+
+    //freeConnList.head2 = NULL;
+    //freeConnList.tail2 = NULL;
+    //freeConnList.size2 = 0;
     //=============================================================================================
 
     m_total_connection_n = 0;     //连接池总连接数
     m_free_connection_n = 0;      //连接池空闲连接数
-    m_recycling_connection_n = 0; //待释放连接队列大小
+    //m_recycling_connection_n = 0; //待释放连接队列大小
 
     return;
 }
@@ -189,22 +193,22 @@ CSocket::Initialize_subproc()
     }
     //=============================================================================================
     //空闲连接相关互斥量初始化
-    err = pthread_mutex_init(&m_freeconnListMutex, NULL);
+    err = pthread_mutex_init(&freeConnListMutex, NULL);
     if (err != 0)
     {
         ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
-            "pthread_mutex_init(&m_freeconnListMutex) failed!");
+            "pthread_mutex_init(&freeConnListMutex) failed!");
         return false;
     }
     //=============================================================================================
     //连接回收队列相关互斥量初始化
-    err = pthread_mutex_init(&recyConnMutex, NULL);
-    if (err != 0)
-    {
-        ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
-            "pthread_mutex_init(&recyConnMutex) failed!");
-        return false;
-    }
+    //err = pthread_mutex_init(&recyConnMutex, NULL);
+    //if (err != 0)
+    //{
+    //    ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
+    //        "pthread_mutex_init(&recyConnMutex) failed!");
+    //    return false;
+    //}
     //=============================================================================================
 
     //初始化发消息相关信号量，信号量用于进程/线程之间的同步，虽然互斥量
@@ -310,18 +314,18 @@ CSocket::Shutdown_subproc()
             "pthread_mutex_destroy(&m_sendMessageQueueMutex) failed!");
     }
     //=============================================================================================
-    err = pthread_mutex_destroy(&m_freeconnListMutex);       //连接相关互斥量释放
+    err = pthread_mutex_destroy(&freeConnListMutex);       //连接相关互斥量释放
     if (err != 0)
     {
         ngx_log_stderr(err, "In CSocket::Shutdown_subproc(), "
-            "pthread_mutex_destroy(&m_freeconnListMutex) failed!");
+            "pthread_mutex_destroy(&freeConnListMutex) failed!");
     }
-    err = pthread_mutex_destroy(&recyConnMutex);    //连接回收队列相关的互斥量释放
-    if (err != 0)
-    {
-        ngx_log_stderr(err, "In CSocket::Shutdown_subproc(), "
-            "pthread_mutex_destroy(&recyConnMutex) failed!");
-    }
+    //err = pthread_mutex_destroy(&recyConnMutex);    //连接回收队列相关的互斥量释放
+    //if (err != 0)
+    //{
+    //    ngx_log_stderr(err, "In CSocket::Shutdown_subproc(), "
+    //        "pthread_mutex_destroy(&recyConnMutex) failed!");
+    //}
     //=============================================================================================
     //if (sem_destroy(&m_semEventSendQueue) == -1)            //发消息相关线程信号量释放
     //{

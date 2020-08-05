@@ -53,6 +53,9 @@ MemPool memPool;
 //和定时器有关的全局变量
 TimeWheel timeWheel;
 
+//和处理错误包头有关的全局变量
+int g_wrongPKGAdmit = 0;
+
 // argv is a pointer to a const pointer to a char
 // const修鉓是表示argv指向的指针是个常量，不能对其进行增减操作
 int main(int argc, char* const* argv)
@@ -170,6 +173,28 @@ int main(int argc, char* const* argv)
     int test = 10;
     ngx_log_stderr(0, "%pasdf%%n", &test);*/
     printf("--------------------------------------------------------\n");
+
+
+    //允许校验错误包次数初始化
+    const char* isOn = p_config->GetString("WrongPKGCheck");
+    if (isOn == NULL)
+    {
+        g_wrongPKGAdmit = 0;
+    }
+    else
+    {
+        if (strcasecmp(isOn, "ON") == 0)
+        {
+            g_wrongPKGAdmit = p_config->GetIntDefault(
+                "WrongPKGCheck_Admit", 5);
+            g_wrongPKGAdmit = ngx_min(g_wrongPKGAdmit, 30000);
+            g_wrongPKGAdmit = ngx_max(g_wrongPKGAdmit, 5);
+        }
+        else
+        {
+            g_wrongPKGAdmit = 0;
+        }
+    }
 
     //(5)创建守护进程
     if (p_config->GetIntDefault("Daemon", 0) == 1) //读配置文件，拿到配置文件中是

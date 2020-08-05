@@ -62,5 +62,6 @@ extern CCRC32* pCRC32;
 //extern TzMemPool<_SPN64K, _LARGE>* pMalloc;
 extern MemPool memPool;
 extern TimeWheel timeWheel;
+extern int g_wrongPKGAdmit;
 
 #endif

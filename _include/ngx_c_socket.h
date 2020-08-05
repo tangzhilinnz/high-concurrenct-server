@@ -74,7 +74,7 @@ struct ngx_connection_s
 														//precvbuf配套使用
 	char*            precvMemPointer;                   //new出来的用于存放收包的
 														//内存首地址
-	int				 wrongPKGAdmit;				//允许校验错误包次数
+	int				 wrongPKGAdmit;				        //允许校验错误包次数
 	pthread_mutex_t  logicPorcMutex;                    //逻辑处理相关的互斥量
 
 	//和发包有关--------------------------------------------------------------------------
@@ -247,15 +247,12 @@ private:
 	//专门用来发送数据的线程
 	static void* ServerSendQueueThread(void* threadData);
 	//专门用来回收连接的线程
-	static void* ServerRecyConnThread(void* threadData);
-	//时间队列监视线程，处理到期不发心跳包的用户踢出的线程
-	static void* ServerTimerQueueMonitorThread(void* threadData);  
+	static void* ServerRecyConnThread(void* threadData); 
 
 protected:
 	//一些和网络通讯有关的成员变量
 	size_t		lenPkgHeader;	//sizeof(COMM_PKG_HEADER);		
 	size_t      lenMsgHeader;    //sizeof(STRUC_MSG_HEADER);
-	//size_t      lenListHook;
 
 	int         m_iWaitTime;        //多少秒检测一次心跳超时，
 									//当Sock_WaitTimeEnable=1时，本项才有用
@@ -281,17 +278,20 @@ private:
 	int  m_epollhandle;         //epoll_create返回的句柄
 
 	//和连接池有关的
-	std::list<lpngx_connection_t>  m_connectionList;     //总连接列表【连接池】
-	std::list<lpngx_connection_t>  m_freeconnectionList; //空闲连接列表
-	std::list<lpngx_connection_t>  m_recyconnectionList; //将要释放的连接
+	std::list<lpngx_connection_t>  m_connectionList;     //总连接列表[连接池]
 	int  m_total_connection_n; //连接池总连接数
+
+	std::list<lpngx_connection_t>  m_freeconnectionList; //空闲连接列表
 	int  m_free_connection_n;  //连接池空闲连接数
-	int  m_recycling_connection_n; //待释放连接队列大小
-	pthread_mutex_t  m_freeconnListMutex;  //空闲连接队列相关互斥量，
-										//互斥m_freeconnectionList
-	pthread_mutex_t  recyConnMutex; //回收连接互斥量
-										//互斥m_recyconnectionList
+	pthread_mutex_t  freeConnListMutex;  //空闲连接队列相关互斥量
 	int  m_RecyConnectionWaitTime; //回收连接等待时间
+
+	//ATOMIC_QUEUE2 freeConnList;
+	//pthread_mutex_t  freeConnListMutex;  //空闲连接队列相关互斥量，
+	//std::list<lpngx_connection_t>  m_recyconnectionList; //将要释放的连接
+	//int  m_recycling_connection_n; //待释放连接队列大小
+	//pthread_mutex_t  recyConnMutex; //回收连接互斥量
+									 //互斥m_recyconnectionList
 
 	//监听套接字队列
 	std::vector<lpngx_listening_t> m_ListenSocketList;
@@ -315,12 +315,7 @@ private:
 	//=============================================================================================
 
 	//时间相关
-	int               m_ifkickTimeCount;      //是否开启踢人时钟，1：开启，0：不开启	
-	pthread_mutex_t   m_timequeueMutex;       //和时间队列有关的互斥量	
-	std::atomic<int>  m_cur_size_;            //时间队列的尺寸
-	time_t            m_timer_value_;         //当前计时队列头部时间值
-	std::multimap<time_t, LPSTRUC_MSG_HEADER> m_timerQueuemap; //时间队列	
-
+	int  m_ifkickTimeCount;      //是否开启踢人时钟，1：开启，0：不开启	
 	//=============================================================================================
 public:
 	static ATOMIC_QUEUE  recvMsgQueue; //must be atomic locked when handling

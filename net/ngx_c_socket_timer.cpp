@@ -27,7 +27,7 @@ CSocket::SetConnToIdle(void* pConnVoid)
 {
 	lpngx_connection_t pConn;
 	pConn = (lpngx_connection_t)pConnVoid;
-    if (pConn == NULL) return;
+    //if (pConn == NULL) return;
 
     while (__sync_lock_test_and_set(&connLOCK, 1)) //ATOMIC LCOK FOR recyConnQueue
     { usleep(0); }
@@ -54,6 +54,10 @@ CSocket::SetConnToIdle(void* pConnVoid)
         ngx_log_stderr(0, "In CSocket::ngx_recycle_connection, "
             "func sem_post(&semRecyConnQueue) failed.");
     }
+
+    //=======================================test====================================
+    //ngx_log_stderr(0, "SetConnToIdle executed!");
+    //=======================================test====================================
 }
 
 void 
@@ -95,7 +99,6 @@ CSocket::PingTimeout(void* pConnVoid)
 
     pConn->fd = -1; //官方nginx这么写，这么写有意义  
     ++pConn->iCurrsequence;
-    //pConn->timerEntryPing = NULL;
 
     __sync_lock_release(&connLOCK); //release ATOMIC LCOK FOR recyConnQueue
 

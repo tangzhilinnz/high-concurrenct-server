@@ -145,7 +145,17 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         ngx_log_stderr(0, "accept(%d) succeeded!", s);  //s这里就是一个句柄了
         newc = ngx_get_connection(s); //这是针对新连入用户的连接，和监听套接字所对应
                                       //的连接是两个不同的socket
-
+        if (newc == NULL)
+        {
+            //连接池中连接不够用，那么就得把这个socekt直接关闭并返回了，因为在
+            //ngx_get_connection()中已经写日志了，所以这里不需要写日志了
+            if (close(s) == -1)
+            {
+                ngx_log_error_core(NGX_LOG_ALERT, errno, 
+                    "In CSocekt::ngx_event_accept, close(%d) failed!", s);
+            }
+            return;
+        }
 
         //......将来这里会判断是否连接超过最大允许连接数，现在，这里可以不处理
 
