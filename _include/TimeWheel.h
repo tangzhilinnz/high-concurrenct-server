@@ -42,6 +42,7 @@ struct TIMER_NODE
 {
     LIST_TIMER ltTimer;       // 定时器双向链表的入口
     uint32 uExpires;          // 定时器到期时间
+    uint32 uDueTime;          // 定时器定时时长
     uint32 uPeriod;           // 定时器触发后，再次触发的间隔时长。如果为 0，表示该定时器为一次性的
     void (*timerFn)(void*);   // 定时器回调函数
     void* pParam;             // 回调函数的参数
@@ -91,7 +92,8 @@ public:
         uint32 uDueTime,        //uDueTime 首次触发的超时时间间隔
         uint32 uPeriod);        //uPeriod 定时器循环周期，若为0，则该定时器只运行一次
 
-    int32 InvalidateTimer(TIMER_NODE* lpTimer); //让定时器失效，但不删除
+    int32 StartTimer(TIMER_NODE* lpTimer); //启动一个已创建的定时器
+    int32 DisableTimer(TIMER_NODE* lpTimer); //让定时器失效，但不删除
     int32 DeleteTimer(TIMER_NODE* lpTimer);  //删除定时器
 
 private:

@@ -41,9 +41,21 @@ ngx_connection_s::ngx_connection_s()
     //    ngx_log_stderr(err, "In ngx_connection_s::ngx_connection_s(), "
     //        "pthread_mutex_init(&recyConnMutex) failed!.");
     //}
+
+    timerEntryPing = timeWheel.CreateTimer(
+        CSocket::PingTimeout, this, CSocket::m_iWaitTime, 0);
+    if (timerEntryPing == NULL)
+        ngx_log_stderr(err, "In ngx_connection_s::ngx_connection_s(), "
+            "CreateTimer(timerEntryPing) failed!.");
+
+    timerEntryRecy = timeWheel.CreateTimer(
+        CSocket::SetConnToIdle, this, CSocket::m_RecyConnWaitTime, 0);
+    if (timerEntryRecy == NULL)
+        ngx_log_stderr(err, "In ngx_connection_s::ngx_connection_s(), "
+            "CreateTimer(timerEntryRecy) failed!.");
 }
 
-//析构函数只做了一件事，释放该连接对象的互斥量成员
+//析构函数只做了一件事，释放该连接对象的互斥量成员和定时器
 ngx_connection_s::~ngx_connection_s() 
 {
     int err = pthread_mutex_destroy(&logicPorcMutex); //互斥量释放
@@ -57,6 +69,10 @@ ngx_connection_s::~ngx_connection_s()
     //    ngx_log_stderr(err, "In ngx_connection_s::~ngx_connection_s(), "
     //        "pthread_mutex_destroy(&recyConnMutex) failed!.");
     //}
+    if (!timerEntryPing) timeWheel.DeleteTimer(timerEntryPing);
+    timerEntryPing = NULL;
+    if (!timerEntryRecy) timeWheel.DeleteTimer(timerEntryRecy);
+    timerEntryRecy = NULL;
 }
 
 //分配出去一个连接的时候初始化一些内容，原来放在ngx_get_connection里做
@@ -77,9 +93,8 @@ ngx_connection_s::GetOneToUse()
 
     sendCount = 0;
     sendBufFull = 0;
-
-    timerEntryRecy = NULL;
-    timerEntryPing = NULL;
+    //timerEntryRecy = NULL;
+    //timerEntryPing = NULL;
     timerStatus = 0;
 
     nextConn = NULL;
@@ -114,11 +129,10 @@ ngx_connection_s::PutOneToFree()
         psendMemPointer = NULL;
     } 
 
-    timeWheel.DeleteTimer(timerEntryRecy);
-    timeWheel.DeleteTimer(timerEntryPing);
-    timerEntryRecy = NULL;
-    timerEntryPing = NULL;
-
+    //timeWheel.DeleteTimer(timerEntryRecy);
+    //timeWheel.DeleteTimer(timerEntryPing);
+    //timerEntryRecy = NULL;
+    //timerEntryPing = NULL;
     //nextConn = NULL;
     //=============================================================================================
 }
@@ -197,7 +211,7 @@ CSocket::clearconnection()
             pConn->fd = -1; //官方nginx这么写，这么写有意义
         }
         pConn->PutOneToFree();
-        pConn->~ngx_connection_t(); //手工调用析构函数，释放该连接对象的互斥量成员
+        pConn->~ngx_connection_t(); //手工调用析构函数，释放该连接对象的互斥量和定时器
 
         /*p_memory->FreeMemory(pConn);*/
         free(pConn);
@@ -212,6 +226,44 @@ CSocket::clearconnection()
     //m_recycling_connection_n = 0; 
 }
 //=======================================================================================
+
+//取连接池保护函数
+bool 
+CSocket::ConnListProtection()
+{
+    if (onlineUserCount >= m_worker_connections)
+    {
+        ngx_log_stderr(0,
+            "Reach the maximum number(%d) of clients allowed by the system, "
+            "connection request failed!", m_worker_connections);
+        /*if (close(s) == -1)
+        {
+            ngx_log_error_core(NGX_LOG_ALERT, errno,
+                "In CSocekt::ngx_event_accept, close(%d) failed!", s);
+        }*/
+        return true;
+    }
+    else //onlineUserCount < m_worker_connections
+    {
+        //某些恶意用户可能连接上来发了1条数据就迅速断开，或者连上后当刚申请了连接池就断开，
+        //这样会频繁调用函数ngx_get_connection，造成短时间内产生大量连接消耗。比如系统允
+        //许2048个客户连接，但连接池却有2048 * 5个连接，如此大的容量表明在短时间内产生了
+        //大批量连接的申请和释放，导致大量连接进入idle状态，无法及时被回收到
+        //m_freeconnectionList，从而无法通过函数ngx_free_connection及时回收给系统；
+        //这样会使系统内存消耗激增，所以必须控制，在此设置m_total_connection_n的最大值为
+        //m_worker_connections * 5
+        if (m_total_connection_n >= (m_worker_connections * 5))
+        {
+            ngx_log_stderr(0,
+                "The number of connections in m_connectionList has exceeded the "
+                "maximum value(%d), connection request failed!", 
+                m_worker_connections * 5);
+            return true;
+        }
+
+        return false;
+    }
+}
 
 //从连接池中获取一个空闲连接(已经在ngx_epoll_init为监听socket消耗两个连接，
 //所以可用于客户连接的只有m_worker_connections - 2 个连接
@@ -324,7 +376,7 @@ CSocket::ngx_free_connection(lpngx_connection_t pConn)
         }
         pConn->fd = -1; //官方nginx这么写，这么写有意义
     }
-    pConn->~ngx_connection_t(); //手工调用析构函数，释放该连接对象的互斥量成员
+    pConn->~ngx_connection_t(); //手工调用析构函数，释放该连接对象的互斥量和定时器
     free(pConn);
 }
 
@@ -357,7 +409,7 @@ CSocket::ngx_recycle_connection(lpngx_connection_t pConn)
     //if (/*pConn->timerEntry == NULL*/m_ifkickTimeCount == 0)
     //{
     //    pConn->timerEntryRecy =  timeWheel.CreateTimer(
-    //        FreeConnToList, pConn, m_RecyConnectionWaitTime, 0);
+    //        FreeConnToList, pConn, m_RecyConnWaitTime, 0);
     //}
     ////pConn->timerEntry != NULL indicates that this pConn has been put in the time wheel
     //else if (m_ifkickTimeCount == 1)
@@ -365,7 +417,7 @@ CSocket::ngx_recycle_connection(lpngx_connection_t pConn)
     //    timeWheel.DeleteTimer(pConn->timerEntryPing);
     //    pConn->timerEntryPing = NULL;
     //    pConn->timerEntryRecy = timeWheel.CreateTimer(
-    //        FreeConnToList, pConn, m_RecyConnectionWaitTime, 0);
+    //        FreeConnToList, pConn, m_RecyConnWaitTime, 0);
     //}
 
     if (pConn == NULL) return;
@@ -456,7 +508,7 @@ CSocket::ngx_recycle_connection(lpngx_connection_t pConn)
 //            {
 //                pConn = (*pos);
 //                //没到释放的时间，如果系统不退出，continue，否则就得要强制释放
-//                if ((pConn->inRecyTime + pSocketObj->m_RecyConnectionWaitTime) > currtime
+//                if ((pConn->inRecyTime + pSocketObj->m_RecyConnWaitTime) > currtime
 //                    && g_stopEvent == 0)
 //                {
 //                    pos++;
@@ -593,11 +645,10 @@ CSocket::ServerRecyConnThread(void* threadData)
                 pConn = pConn->nextConn; //指向下一个连接
                 if (pConn1->timerStatus == 0)
                 {
-                    //首先让心跳包定时器失效(无论有没有创建，都可以调用)，再创建连接的idle定时器
+                    //首先让心跳包定时器失效(无论有没有创建，都可以调用)，再启动连接的idle定时器
                     //if (pSocketObj->m_ifkickTimeCount == 1)
-                    timeWheel.InvalidateTimer(pConn1->timerEntryPing);
-                    pConn1->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
-                        pConn1, pSocketObj->m_RecyConnectionWaitTime, 0);
+                    timeWheel.DisableTimer(pConn1->timerEntryPing);
+                    timeWheel.StartTimer(pConn1->timerEntryRecy);
                     pConn1->timerStatus = 1; //将timerStatus置为1，回收状态
                     //===============================test================================
                     //ngx_log_stderr(0, "pConn->timerStatus == 1");
@@ -631,9 +682,9 @@ CSocket::ServerRecyConnThread(void* threadData)
         //    if (pConn->timerStatus == 0)
         //    {
         //        //首先让心跳包定时器失效(无论有没有创建，都可以调用)，再创建连接的idle定时器
-        //        timeWheel.InvalidateTimer(pConn->timerEntryPing);
+        //        timeWheel.DisableTimer(pConn->timerEntryPing);
         //        pConn->timerEntryRecy = timeWheel.CreateTimer(SetConnToIdle,
-        //            pConn, pSocketObj->m_RecyConnectionWaitTime, 0);
+        //            pConn, pSocketObj->m_RecyConnWaitTime, 0);
         //        pConn->timerStatus = 1; //将timerStatus置为1，回收状态
         //        --pSocketObj->onlineUserCount; //连入用户数量-1
         //    }

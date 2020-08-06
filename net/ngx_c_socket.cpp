@@ -33,13 +33,25 @@ ATOMIC_QUEUE2 CSocket::recyConnQueue; //must be atomic locked when handling
 
 sem_t CSocket::semRecyConnQueue;  //the semaphore for handling recyConnQueue
 
+//========================================配置相关========================================
+int CSocket::m_ifkickTimeCount = 0; //是否开启踢人时钟，1：开启，0：不开启
+int CSocket::m_ifTimeOutKick = 0;  //当时间到达Sock_MaxWaitTime指定的时间时，直接把客户端踢出去；
+                                   //只有当Sock_WaitTimeEnable=1时，本项才有用
+int CSocket::m_iWaitTime = 5000; //多少秒检测一次心跳超时，
+                                 //只有当Sock_WaitTimeEnable=1时，本项才有用
+int CSocket::m_RecyConnWaitTime = 5000; //回收连接等待时间(ms)
+int CSocket::m_worker_connections = 1; //epoll连接的最大项数
+int	CSocket::m_ListenPortCount = 2; //所监听的端口数量
+//========================================配置相关========================================
+
+
 //构造函数
 CSocket::CSocket()
 {
     //配置相关
-    m_worker_connections = 1;        //epoll连接最大项数
-    m_ListenPortCount = 2;           //默认监听2个端口
-    m_RecyConnectionWaitTime = 5000; //等待这么些秒后才回收连接
+    //m_worker_connections = 1;        //epoll连接最大项数
+    //m_ListenPortCount = 2;           //默认监听2个端口
+    //m_RecyConnWaitTime = 5000; //等待这么些秒后才回收连接
 
     //epoll相关
     m_epollhandle = -1;            //epoll返回的句柄
@@ -351,9 +363,9 @@ CSocket::ReadConf()
         m_worker_connections);                  //epoll连接的最大项数
     m_ListenPortCount = p_config->GetIntDefault("ListenPortCount", 
         m_ListenPortCount);                     //取得要监听的端口数量
-    m_RecyConnectionWaitTime = p_config->GetIntDefault(
+    m_RecyConnWaitTime = p_config->GetIntDefault(
         "Sock_RecyConnectionWaitTime", 
-        m_RecyConnectionWaitTime);              //回收连接等待时间
+        m_RecyConnWaitTime);              //回收连接等待时间
 
     //是否开启踢人时钟，1：开启   0：不开启
     m_ifkickTimeCount = p_config->GetIntDefault("Sock_WaitTimeEnable", 0);

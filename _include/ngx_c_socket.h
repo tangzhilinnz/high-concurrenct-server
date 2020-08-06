@@ -136,9 +136,12 @@ struct ATOMIC_QUEUE2 //for handing connections
 	int size2;
 };
 
-//socket相关类
+//socket类
 class CSocket
 {
+	//声明 struct ngx_connection_s 是 class CSocket 的友元类
+	friend struct ngx_connection_s;
+
 public:
 	CSocket();                              //构造函数
 	virtual ~CSocket();                     //释放函数 
@@ -227,6 +230,8 @@ private:
 	void initconnection(); //初始化连接池
 	void clearconnection(); //回收连接池
 
+	bool ConnListProtection(); //连接对象池和客户连入控制
+
 	////和时间相关的函数
 	////设置踢出时钟(向map表中增加内容)
 	//void AddToTimerQueue(lpngx_connection_t pConn);                    
@@ -254,10 +259,6 @@ protected:
 	size_t		lenPkgHeader;	//sizeof(COMM_PKG_HEADER);		
 	size_t      lenMsgHeader;    //sizeof(STRUC_MSG_HEADER);
 
-	int         m_ifTimeOutKick; //当时间到达Sock_MaxWaitTime指定的时间时，直接把客户端踢出去；
-								 //只有当Sock_WaitTimeEnable=1时，本项才有用
-	int         m_iWaitTime;     //多少秒检测一次心跳超时，
-								 //只有当Sock_WaitTimeEnable=1时，本项才有用
 	//定时器专用函数
 	static void SetConnToIdle(void* pConnVoid);
 	static void PingTimeout(void* pConnVoid);
@@ -275,8 +276,6 @@ private:
 		~ThreadItem() {}
 	};
 
-	int  m_worker_connections;  //epoll连接的最大项数
-	int	 m_ListenPortCount;     //所监听的端口数量
 	int  m_epollhandle;         //epoll_create返回的句柄
 
 	//和连接池有关的
@@ -286,7 +285,6 @@ private:
 	std::list<lpngx_connection_t>  m_freeconnectionList; //空闲连接列表
 	int  m_free_connection_n;  //连接池空闲连接数
 	pthread_mutex_t  freeConnListMutex;  //空闲连接队列相关互斥量
-	int  m_RecyConnectionWaitTime; //回收连接等待时间
 
 	//ATOMIC_QUEUE2 freeConnList;
 	//pthread_mutex_t  freeConnListMutex;  //空闲连接队列相关互斥量，
@@ -314,12 +312,21 @@ private:
 	pthread_mutex_t   m_sendMessageQueueMutex; //发消息队列互斥量 
 	pthread_mutex_t   m_recvMessageQueueMutex; //收消息队列互斥量
 	sem_t             m_semEventSendQueue;     //处理发消息线程相关的信号量
+
+	std::atomic<int>  onlineUserCount; //当前在线用户数统计相关
+
+protected:
 	//=============================================================================================
-	//时间相关
-	int  m_ifkickTimeCount;      //是否开启踢人时钟，1：开启，0：不开启	
-	//=============================================================================================
-	//当前在线用户数统计相关
-	std::atomic<int>  onlineUserCount;  
+	//所有配置相关的变量
+	static int  m_ifkickTimeCount; //是否开启踢人时钟，1：开启，0：不开启
+	static int  m_ifTimeOutKick; //当时间到达Sock_MaxWaitTime指定的时间时，直接把客户端踢出去；
+								 //只有当Sock_WaitTimeEnable=1时，本项才有用
+	static int  m_iWaitTime;     //多少秒检测一次心跳超时，
+								 //只有当Sock_WaitTimeEnable=1时，本项才有用
+	static int  m_RecyConnWaitTime; //回收连接等待时间
+	static int  m_worker_connections; //epoll连接的最大项数
+	static int	m_ListenPortCount; //所监听的端口数量
+	//=============================================================================================  
 
 public: //一些消息队列和连接队列
 	static ATOMIC_QUEUE  recvMsgQueue; //must be atomic locked when handling

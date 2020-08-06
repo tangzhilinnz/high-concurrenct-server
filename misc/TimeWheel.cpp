@@ -229,7 +229,8 @@ TimeWheel::RunTimer(void)
                 pTmr->uExpires = uJiffies_ + pTmr->uPeriod;
                 AddTimer(pTmr);
             }
-            else /*free(pTmr)*/ pTmr->isEffective = 0; //定时器失效，但不删除
+            else /*free(pTmr)*/ 
+                pTmr->isEffective = 0; //定时器失效，但不删除
         }
 
         uJiffies_++;
@@ -351,21 +352,47 @@ TimeWheel::CreateTimer(
 
     if (pTmr != NULL)
     {
+        (pTmr->ltTimer).pNext = NULL;
+        (pTmr->ltTimer).pPrev = NULL;
+
         pTmr->uPeriod = uPeriod;
         pTmr->timerFn = timerFn;
         pTmr->pParam = pParam;
-
-        TimeWheelMutex Lock(&mutexLock_);
-        
+        pTmr->uDueTime = uDueTime;
+        pTmr->uExpires = 0; //初始化到期时间为0
+        pTmr->isEffective = 0;
+        /*TimeWheelMutex Lock(&mutexLock_);     
         pTmr->uExpires = uJiffies_ + uDueTime;
         pTmr->isEffective = 1;
-        AddTimer(pTmr);
+        AddTimer(pTmr);*/
     }
 
     return pTmr;
 }
 
-//修改一个定时器
+//启动一个定时器，成功启动返回0，失败返回-1
+int32
+TimeWheel::StartTimer(TIMER_NODE* lpTimer)
+{
+    LIST_TIMER* pListTmr;
+
+    if (init_ == 0 || NULL == lpTimer) return -1;
+
+    TimeWheelMutex Lock(&mutexLock_); //lock
+
+    //若该定时器不在时间轮上，便将其添加到时间轮上，让其生效
+    if (0 == lpTimer->isEffective)
+    {
+        lpTimer->uExpires = uJiffies_ + lpTimer->uDueTime;
+        lpTimer->isEffective = 1;
+        AddTimer(lpTimer);
+    }
+    //该定时器已在时间轮上，已经是有效状态，则直接返回
+    return 0;
+}
+
+//修改一个定时器，只有当该定时器在时间轮上运行时才能修改(成功返回0)，
+//否则无法修改(失败返回-1)
 int32
 TimeWheel::ModifyTimer(            
     TIMER_NODE* lpTimer,    //需要被修改的定时器节点指针
@@ -378,13 +405,14 @@ TimeWheel::ModifyTimer(
     //TIMER_NODE* pTmr;
     if (NULL == lpTimer || NULL == timerFn || init_ == 0) return -1;
 
-    TimeWheelMutex Lock(&mutexLock_);
+    TimeWheelMutex Lock(&mutexLock_); //lock
 
     if (1 == lpTimer->isEffective) //该定时器在时间轮上，有效状态
     {
         lpTimer->uPeriod = uPeriod;
         lpTimer->timerFn = timerFn;
         lpTimer->pParam = pParam;
+        lpTimer->uDueTime = uDueTime;
         pListTmr = &lpTimer->ltTimer;
         //=========================从时间轮上取下定时器，再重新加入=========================
         pListTmr->pPrev->pNext = pListTmr->pNext;
@@ -400,15 +428,16 @@ TimeWheel::ModifyTimer(
     }
 }
 
-//让定时器失效，但不删除
+//让定时器失效，但不删除，成功返回0，失败-1
 int32
-TimeWheel::InvalidateTimer(TIMER_NODE* lpTimer)
+TimeWheel::DisableTimer(TIMER_NODE* lpTimer)
 {
     LIST_TIMER* pListTmr;
 
     if (init_ == 0 || NULL == lpTimer) return -1;
 
-    TimeWheelMutex Lock(&mutexLock_);
+    TimeWheelMutex Lock(&mutexLock_); //lock
+
     //若该定时器在时间轮上，有效状态，需从时间轮上取下来让其失效
     if (1 == lpTimer->isEffective)
     {
@@ -421,7 +450,7 @@ TimeWheel::InvalidateTimer(TIMER_NODE* lpTimer)
     return 0;  
 }
 
-//删除定时器
+//删除定时器，成功删除返回0，失败返回-1
 int32
 TimeWheel::DeleteTimer(TIMER_NODE* lpTimer)
 {
@@ -429,7 +458,8 @@ TimeWheel::DeleteTimer(TIMER_NODE* lpTimer)
 
     if (init_ == 0 || NULL == lpTimer) return -1;
 
-    TimeWheelMutex Lock(&mutexLock_);
+    TimeWheelMutex Lock(&mutexLock_); //lock
+
     //该定时器在时间轮上，有效状态，需从时间轮上取下来，再删除
     if (1 == lpTimer->isEffective) 
     {
