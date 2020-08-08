@@ -48,7 +48,6 @@ sig_atomic_t  ngx_reap; //标记子进程状态变化(一般是子进程发来SI
 //和数据包校验有关的全局变量
 CCRC32* pCRC32;
 //和内存分配有关的全局变量
-//TzMemPool<_SPN64K, _LARGE>* pMalloc;
 MemPool memPool;
 //和定时器有关的全局变量
 TimeWheel timeWheel;
@@ -121,14 +120,14 @@ int main(int argc, char* const* argv)
         return exitcode;
     }
 
-    if (g_socket.Initialize() == false) //仅初始化监听socket，还未初始化epoll函数
-    {
-        exitcode = 1;
-        
-        ngx_log_stderr(0, "Program exit!\n");
-        freeresource();  //一系列的main返回前的释放动作函数
-        return exitcode;
-    }
+    //if (g_socket.Initialize() == false) //仅初始化监听socket，还未初始化epoll函数
+    //{
+    //    exitcode = 1;
+    //    
+    //    ngx_log_stderr(0, "Program exit!\n");
+    //    freeresource();  //一系列的main返回前的释放动作函数
+    //    return exitcode;
+    //}
 
     //(4)一些不好归类的其他类别的代码，准备放这里
     ngx_init_setproctitle();    //把环境变量和命令行参数搬家，让它们在修改完进程名

@@ -421,10 +421,20 @@ CSocket::ngx_open_listening_sockets()
             (const void*)&reuseaddr, sizeof(reuseaddr)) == -1)
         {
             ngx_log_stderr(errno, "In CSocket::ngx_open_listening_sockets, "
-                "func setsockopt(i=%d) failed.", i);
+                "func setsockopt(SO_REUSEADDR) failed.");
             //ngx_close_listening_sockets(); //~CSocket函数中调用这个函数
             close(isock); //关闭这个未成功建立的监听isock
             return false; //false表示主程序也将退出
+        }
+
+        //为处理惊群问题使用reuseport，端口复用需要内核支持
+        int reuseport = 1;
+        if (setsockopt(isock, SOL_SOCKET, SO_REUSEPORT, 
+            (const void*)&reuseport, sizeof(reuseport)) == -1)
+        {
+            //失败就失败吧，失败顶多是惊群，但程序依旧可以正常运行，所以仅仅提示一下即可
+            ngx_log_stderr(errno, "In CSocket::ngx_open_listening_sockets, "
+                "func setsockopt(SO_REUSEPORT) falied.");
         }
 
         //设置该socket为非阻塞

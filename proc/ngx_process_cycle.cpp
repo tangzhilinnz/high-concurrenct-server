@@ -229,6 +229,14 @@ static void ngx_worker_process_init(int inum)
     if (!memPool.CreatPool()) exit(-2);
 #endif
 
+    //配合setsockopt(isock, SOL_SOCKET, SO_REUSEPORT, (const void*)&reuseport, sizeof(reuseport))
+    //函数，实现linux系统级别的多进程惊群解决方案
+    if (g_socket.Initialize() == false) //仅初始化监听socket，还未初始化epoll函数
+    {
+        //内存没释放，简单粗暴退出；
+        exit(-2);
+    }
+
     //线程池代码，率先创建，至少要比和socket相关的内容优先
     CConfig* p_config = CConfig::GetInstance();
     //处理接收到的消息的线程池中线程数量

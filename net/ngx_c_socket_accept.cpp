@@ -66,6 +66,19 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         //ngx_log_stderr(0,"测试惊群问题，看惊动几个worker进程%d\n",s); 
         //我的结论是：accept4可以认为基本解决惊群问题，但似乎并没有完全解决，有时候还
         //会惊动其他的worker进程
+    
+        if(s == -1)
+        {
+            ngx_log_stderr(
+                0, "thundering herd test: In CSocket::ngx_event_accept, "
+                "func accept failed(pid = %d)!", ngx_pid); 
+        }
+        else
+        {
+            ngx_log_stderr(
+                0, "thundering herd test: In CSocket::ngx_event_accept, "
+                "func accept succeeded(pid = %d)!", ngx_pid);
+        }      
 
         if (s == -1)
         {
@@ -140,24 +153,24 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
 
             return;
         }
-
         //走到这里的，表示accept4/accept成功了 
 
-        //用户连接数过多，要关闭该用户socket，因为现在也没分配连接，所以直接关闭即可
-        /*if (onlineUserCount >= m_worker_connections)
-        {
-            ngx_log_stderr(0,
-                "exceeded the maximum number(%d) of connections allowed by the system, "
-                "connection request failed for socket(%d)!", m_worker_connections, s);
-            if (close(s) == -1)
-            {
-                ngx_log_error_core(NGX_LOG_ALERT, errno,
-                    "In CSocekt::ngx_event_accept, close(%d) failed!", s);
-            }
-            return;
-        }*/
+        ////用户连接数过多，要关闭该用户socket，因为现在也没分配连接，所以直接关闭即可
+        //if (onlineUserCount >= m_worker_connections)
+        //{
+        //    ngx_log_stderr(0,
+        //        "exceeded the maximum number(%d) of connections allowed by the system, "
+        //        "connection request failed for socket(%d)!", m_worker_connections, s);
+        //    if (close(s) == -1)
+        //    {
+        //        ngx_log_error_core(NGX_LOG_ALERT, errno,
+        //            "In CSocekt::ngx_event_accept, close(%d) failed!", s);
+        //    }
+        //    return;
+        //}
 
-        if (ConnListProtection())
+        //申请连接之前，首先进行连接对象池和客户连入控制
+        if (ConnListProtection()) 
         {
             if (close(s) == -1)
             {
