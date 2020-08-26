@@ -90,7 +90,7 @@ CLogicSocket::threadRecvProcFunc(char* pMsgBuf)
     //iCurrsequence加1；ngx_get_connection启用这个连接，iCurrsequence再加1
 
     //=========================================================================================
-    if (p_Conn->iCurrsequence != pMsgHeader->iCurrsequence)
+    if (p_Conn->fd == -1 || p_Conn->iCurrsequence != pMsgHeader->iCurrsequence)
     {
         return; //丢弃，客户端断开了
     }
@@ -490,8 +490,8 @@ CLogicSocket::_HandlePing(
     //服务器也发送一个只有包头的心跳包给客户端，作为返回的数据
     SendNoBodyPkgToClient(pMsgHeader, _CMD_PING);
 
-    ngx_log_stderr(0, "receive a heartbeat packet from client[%s] and return one",
-        pConn->addr_text);
+    /*ngx_log_stderr(0, "receive a heartbeat packet from client[%s] and return one",
+        pConn->addr_text);*/
 
     return true;
 }

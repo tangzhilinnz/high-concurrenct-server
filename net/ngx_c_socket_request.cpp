@@ -28,6 +28,18 @@
 void 
 CSocket::ngx_read_request_handler(lpngx_connection_t pConn)
 {
+    //test
+    //const int buffLen = 4096 * 4;
+    //struct timespec tmv1, tmv2;
+    double tm = 0;
+    //int count;
+    //char buffer[buffLen];
+    ssize_t n;
+    n =  recvproc(pConn, pConn->pRecvBuff, connBuffSize);
+    //n = recv(pConn->fd, buffer, buffLen, 0); //recv()系统函数，最后一个参数flag，一般为0；
+    ngx_log_stderr(0, "recv Length: %d", n);
+    return;
+
     //收包，注意我们用的第二个和第三个参数，我们用的始终是这两个参数，因此我们必须保证
     //c->precvbuf指向正确的收包位置，保证c->irecvlen指向正确的收包宽度
     //c->precvbuf初始指向c->dataHeadInfo
@@ -176,7 +188,7 @@ CSocket::recvproc(lpngx_connection_t PConn, char* buff, ssize_t buflen)
                 "while receiving data!");
         }
 
-        ngx_log_stderr(0, "connection was closed by the client(Abnormally)!");
+        ngx_log_stderr(errno, "connection was closed by the client(Abnormally)!");
         //=========================================================================================
         //这种真正的错误就要，直接关闭套接字，释放连接池中连接了
         ngx_recycle_connection(PConn);
@@ -486,6 +498,9 @@ CSocket::sendproc(lpngx_connection_t PConn, char* buff, ssize_t size)
             //遵循一个原则，连接断开，我们并不在send动作里处理，集中到recv处理，
             //否则send，recv都处理连接断开会乱套，因为send函数的调用再另一个线程
             //连接断开epoll会通知并且recvproc里会处理，不在这里处理
+	    //===========================================================================
+	    //ngx_recycle_connection(PConn);
+	    //===========================================================================
             return 0;
         }
 
@@ -512,7 +527,11 @@ CSocket::sendproc(lpngx_connection_t PConn, char* buff, ssize_t size)
             //走到这里表示的是其他errno，都表示错误，错误也不断开socket，我也依然等待
             //recvproc来统一处理断开，因为引入多线程，如果sendproc和recvproc同时处
             //理断开，很难处理好
-            return -2;
+            
+	    //===========================================================================
+	    //ngx_recycle_connection(PConn);
+	    //===========================================================================				
+	    return -2;
         }
     }
 }
@@ -549,6 +568,7 @@ CSocket::ngx_write_request_handler(lpngx_connection_t pConn)
         //如果是断线，系统会自动把连接节点从红黑树中干掉，不用管
         //pConn->whandler = &CSocket::ngx_null_request_handler;
         if (ngx_epoll_oper_event(
+            pConn->pIOthread->epollHandle,
             pConn->fd,      //socket句柄
             EPOLL_CTL_MOD,  //这里是修改，因为我们准备减去写通知
             EPOLLOUT,       //EPOLLOUT：可写的时候通知我
@@ -567,8 +587,8 @@ CSocket::ngx_write_request_handler(lpngx_connection_t pConn)
         //=========================================================================================
         pConn->psendMemPointer = NULL;
         //++pConn->sentMsgCount; //成功发送消息后，sentMsgCount加1进行统计
-        ngx_log_stderr(0, "In CSocekt::ngx_write_request_handler, "
-            "a message has been sent successfully!");
+        /*ngx_log_stderr(0, "In CSocekt::ngx_write_request_handler, "
+            "a message has been sent successfully!");*/
         pConn->sendBufFull = 0;
     }
     
@@ -584,11 +604,11 @@ CSocket::ngx_write_request_handler(lpngx_connection_t pConn)
     //sem_post是给信号量的值加上一个1，它是一个原子操作，即同时对同一个信号量做加1操作
     //的两个线程是不会冲突的
     //=========================================================================================
-    //if (sem_post(&m_semEventSendQueue) == -1)
-    //{
-    //    ngx_log_stderr(0, "In CSocekt::ngx_write_request_handler, "
-    //        "func sem_post(&m_semEventSendQueue) failed!");
-    //}
+    if (sem_post(&semEventSendQueue) == -1)
+    {
+        ngx_log_stderr(0, "In CSocekt::ngx_write_request_handler, "
+            "func sem_post(&semEventSendQueue) failed!");
+    }
     //=========================================================================================
     return;
 }

@@ -240,7 +240,7 @@ static void ngx_worker_process_init(int inum)
     //线程池代码，率先创建，至少要比和socket相关的内容优先
     CConfig* p_config = CConfig::GetInstance();
     //处理接收到的消息的线程池中线程数量
-    int tmpthreadnums = p_config->GetIntDefault("ProcMsgRecvWorkThreadCount", 3);
+    int tmpthreadnums = p_config->GetIntDefault("ProcMsgRecvWorkThreadCount", 4);
     //定时器初始化
     if (timeWheel.CreateTimeWheel() == false)
     {

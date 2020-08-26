@@ -29,6 +29,8 @@ ngx_connection_s::ngx_connection_s()
     fd = -1;
     instance = 1;
     iCurrsequence = 0;
+    pRecvBuff = NULL;
+    //epollHandle = 0;
     int err = pthread_mutex_init(&logicPorcMutex, NULL); //互斥量初始化
     if (err != 0) 
     {
@@ -91,6 +93,8 @@ ngx_connection_s::GetOneToUse()
     psendMemPointer = NULL;             //发送数据头指针记录，先给NULL
     events = 0;                         //epoll事件先给0 
 
+    pIOthread = NULL;
+
     sendCount = 0;
     sendBufFull = 0;
     //timerEntryRecy = NULL;
@@ -128,6 +132,12 @@ ngx_connection_s::PutOneToFree()
         free(psendMemPointer);
         psendMemPointer = NULL;
     } 
+
+    if (pRecvBuff != NULL)
+    {
+        free(pRecvBuff);
+        pRecvBuff = NULL;
+    }
 
     //timeWheel.DeleteTimer(timerEntryRecy);
     //timeWheel.DeleteTimer(timerEntryPing);
@@ -284,11 +294,14 @@ CSocket::ngx_get_connection(int isock)
         --m_free_connection_n;
         pConn->fd = isock;
 
+        pConn->pRecvBuff = (char*)malloc(connBuffSize);
+        if (pConn->pRecvBuff == NULL)
+            return NULL;
         //=======================================test====================================
-        ngx_log_stderr(0, "the size of m_freeconnectionList after one fetch: %d", 
+        /*ngx_log_stderr(0, "the size of m_freeconnectionList after one fetch: %d", 
             m_free_connection_n);
         ngx_log_stderr(0, "the total size of m_connectionList: %d",
-            m_total_connection_n);
+            m_total_connection_n);*/
         //=======================================test====================================
         return pConn;
     }
@@ -321,11 +334,14 @@ CSocket::ngx_get_connection(int isock)
     ++m_total_connection_n;
     pConn->fd = isock;
 
+    pConn->pRecvBuff = (char*)malloc(connBuffSize);
+    if (pConn->pRecvBuff == NULL)
+        return NULL;
     //=======================================test====================================
-    ngx_log_stderr(0, "the size of m_freeconnectionList after one fetch: %d",
+    /*ngx_log_stderr(0, "the size of m_freeconnectionList after one fetch: %d",
         m_free_connection_n);
     ngx_log_stderr(0, "the total size of m_connectionList: %d",
-        m_total_connection_n);
+        m_total_connection_n);*/
     //=======================================test====================================
 
     return pConn;
@@ -342,9 +358,9 @@ CSocket::ngx_free_connection(lpngx_connection_t pConn)
     //2）主线程会调用ngx_get_connection函数，也会在其中操作变量
     //   freeConnList
     //所以这里需要互斥锁
-    ngx_log_stderr(0, "In CSocket::ngx_free_connection, "
+    /*ngx_log_stderr(0, "In CSocket::ngx_free_connection, "
         "connection for [%s] is reclaimed to m_freeconnectionList.",
-        pConn->addr_text);
+        pConn->addr_text);*/
 
     //首先明确一点，所有连接全部都在m_connectionList里
     CLock lock(&freeConnListMutex);
@@ -462,9 +478,13 @@ CSocket::ngx_recycle_connection(lpngx_connection_t pConn)
         ngx_log_stderr(0, "In CSocket::ngx_recycle_connection, "
             "func sem_post(&semRecyConnQueue) failed.");
     }
-
+	
+    pConn->pIOthread->connCount--; //拥有pConn连接的IO线程连接数-1
+    onlineUserCount--; //连入用户数量-1
+    int tmp = onlineUserCount; 
     //=======================================test====================================
-    //ngx_log_stderr(0, "ngx_recycle_connection executed!");
+    ngx_log_stderr(0, "(PID: %d) ngx_recycle_connection executed! The onlineUserCount: %d", 
+        pthread_self(), tmp);
     //=======================================test====================================
 
     return;
@@ -616,7 +636,7 @@ CSocket::ServerRecyConnThread(void* threadData)
             //错误的话信号量的值不改动，返回-1，errno设定来标识错误
             //error type: 
             //EINTR: The call was interrupted by a signal handler; see signal(7)
-            //EINVAL: m_semEventSendQueue is not a valid semaphores           
+            //EINVAL: semEventSendQueue is not a valid semaphores           
             if (errno != EINTR) //EINTR不算错误
                 ngx_log_stderr(errno, "In CSocekt::ServerRecyConnThread, "
                     "func sem_wait(&semRecyConnQueue) failed!.");
@@ -652,7 +672,7 @@ CSocket::ServerRecyConnThread(void* threadData)
                     //===============================test================================
                     //ngx_log_stderr(0, "pConn->timerStatus == 1");
                     //===============================test================================
-                    --pSocketObj->onlineUserCount; //连入用户数量-1
+                    //onlineUserCount--; //连入用户数量-1
                 }
                 else if (pConn1->timerStatus == 1)
                 {

@@ -106,10 +106,33 @@ CSocket::PingTimeout(void* pConnVoid)
     //一个1，它是一个原子操作，即同时对同一个信号量做加1操作的两个线程是不会冲突的
     if (sem_post(&semRecyConnQueue) == -1)
     {
-        ngx_log_stderr(0, "In CSocket::ngx_recycle_connection, "
+        ngx_log_stderr(0, "In CSocket::PingTimeout, "
             "func sem_post(&semRecyConnQueue) failed.");
     }
 
+    pConn->pIOthread->connCount--; //拥有pConn连接的IO线程连接数-1
+    onlineUserCount--; //连入用户数量-1
+    int tmp = onlineUserCount;  
     ngx_log_stderr(0, "In CSocket::PingTimeout, "
-        "connection for [%s] is closed!", pConn->addr_text);
+        "connection for [%s] is closed! The onlineUserCount: %d",
+	    pConn->addr_text, tmp);
+}
+
+void //每隔5秒，向屏幕打印服务器相关信息
+CSocket::PrintInfo(void* pConnVoid)
+{
+    int tmp = onlineUserCount;
+    ngx_log_stderr(0, "============================ My Server ==========================");
+    for (int i = 0; i < IOThreadCount; i++)
+    {
+        int tmp = IOThreads[i].connCount;
+        ngx_log_stderr(0, "Thread_%d: has %d conns", i, tmp);
+    }
+    ngx_log_stderr(0, "onlineUserCount: %d", tmp);
+    ngx_log_stderr(0, "recvMsgQueue Size: %d", recvMsgQueue.size);
+    ngx_log_stderr(0, "sendMsgQueue Size: %d", sendMsgQueue.size);
+    ngx_log_stderr(0, "sendingQueue Size: %d", sendingQueue.size);
+    ngx_log_stderr(0, "m_free_connection_n: %d", m_free_connection_n);
+    ngx_log_stderr(0, "m_total_connection_n: %d", m_total_connection_n);
+    ngx_log_stderr(0, "============================ My Server ==========================");
 }

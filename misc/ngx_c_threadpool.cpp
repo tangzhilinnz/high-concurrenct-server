@@ -146,7 +146,6 @@ CThreadPool::ThreadFunc(void* threadData)
                 ngx_log_stderr(err, "In CThreadPool::ThreadFunc, "
                     "func pthread_cond_wait failed，the returned errno is %d!",
                     err);
-
             }
         }
 

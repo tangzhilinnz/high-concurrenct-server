@@ -15,8 +15,8 @@
 #include "TimeWheel.h"
 
 //一些宏定义放在这里-----------------------------------------------------------------------
-#define NGX_LISTEN_BACKLOG  511	  //已完成连接队列，限制为511，
-#define NGX_MAX_EVENTS      1000  //epoll_wait一次最多接收这么多个事件，
+#define NGX_LISTEN_BACKLOG  4096	   //已完成连接队列，限制为511，
+#define NGX_MAX_EVENTS      1024  //epoll_wait一次最多接收这么多个事件，
 							      //nginx中缺省是512
 
 typedef struct ngx_listening_s   ngx_listening_t, *lpngx_listening_t;
@@ -34,6 +34,13 @@ struct ngx_listening_s  //和监听端口有关的结构
 	lpngx_connection_t p_connection; //连接池中的一个连接，注意这是个指针
 };
 
+struct IOthreadCache
+{
+	int epollHandle;
+	std::atomic<int>  connCount;
+	//struct epoll_event  events[NGX_MAX_EVENTS];
+};
+
 //以下三个结构是非常重要的三个结构，我们遵从官方nginx的写法；
 //该结构表示一个TCP连接(客户端主动发起的、Nginx服务器被动接受的TCP连接)
 struct ngx_connection_s
@@ -43,6 +50,7 @@ struct ngx_connection_s
 	void GetOneToUse();                  //分配出去的时候初始化一些内容
 	void PutOneToFree();                 //回收回来的时候做一些事情
 
+	IOthreadCache*       pIOthread;      //该连接所关联的IOthreadCache
 	int                  fd;             //套接字句柄socket
 	lpngx_listening_t    listening;      //如果这个连接被分配了一个监听套接字，
 									     //listening就指向监听套接字对应的那个
@@ -75,6 +83,9 @@ struct ngx_connection_s
 	char*            precvMemPointer;                   //new出来的用于存放收包的
 														//内存首地址
 	int				 wrongPKGAdmit;				        //允许校验错误包次数
+
+	char*            pRecvBuff;                         //指向该连接的数据接收缓冲区
+
 	pthread_mutex_t  logicPorcMutex;                    //逻辑处理相关的互斥量
 
 	//和发包有关--------------------------------------------------------------------------
@@ -163,9 +174,11 @@ public:
 
 public:
 	int  ngx_epoll_init(); //epoll功能初始化
-	int ngx_epoll_oper_event(int fd, uint32_t eventtype, uint32_t flag,
+	int ngx_epoll_oper_event(int epollHandle, int fd, uint32_t eventtype, uint32_t flag,
 		int bcaction, lpngx_connection_t pConn); //epoll操作事件
 	int ngx_epoll_process_events(int timer); //epoll等待接收和处理事件
+
+	bool SetandStartPrint(void); //设置屏幕打印消息
 
 protected:
 	//=============================================================================================
@@ -253,6 +266,8 @@ private:
 	static void* ServerSendQueueThread(void* threadData);
 	//专门用来回收连接的线程
 	static void* ServerRecyConnThread(void* threadData); 
+	//专门用来处理IO(收数据，发数据)的线程
+	static void* ServerIOThread(void* threadData);
 
 protected:
 	//一些和网络通讯有关的成员变量
@@ -260,6 +275,7 @@ protected:
 	size_t      lenMsgHeader;    //sizeof(STRUC_MSG_HEADER);
 
 	//定时器专用函数
+	static void PrintInfo(void* pConnVoid);
 	static void SetConnToIdle(void* pConnVoid);
 	static void PingTimeout(void* pConnVoid);
 
@@ -268,22 +284,28 @@ private:
 	{
 		pthread_t   _Handle;	  //线程句柄
 		CSocket*    _pThis;       //记录线程池的指针	
+		int         _epollHandle;
 		bool        ifrunning;    //标记是否正式启动起来，启动起来后，
 								  //才允许调用StopAll()来释放
 		//构造函数
-		ThreadItem(CSocket* pthis) :_pThis(pthis), ifrunning(false) {}
+		ThreadItem(CSocket* pthis) :
+			_pThis(pthis), _epollHandle(0), ifrunning(false) {}
 		//析构函数
 		~ThreadItem() {}
 	};
 
-	int  m_epollhandle;         //epoll_create返回的句柄
+	static IOthreadCache* IOThreads;
+
+	TIMER_NODE* pPrintInfo;
+
+	int  m_epollHandle;         //epoll_create返回的句柄
 
 	//和连接池有关的
 	std::list<lpngx_connection_t>  m_connectionList;     //总连接列表[连接池]
-	int  m_total_connection_n; //连接池总连接数
+	static int  m_total_connection_n; //连接池总连接数
 
 	std::list<lpngx_connection_t>  m_freeconnectionList; //空闲连接列表
-	int  m_free_connection_n;  //连接池空闲连接数
+	static int  m_free_connection_n;  //连接池空闲连接数
 	pthread_mutex_t  freeConnListMutex;  //空闲连接队列相关互斥量
 
 	//ATOMIC_QUEUE2 freeConnList;
@@ -311,9 +333,8 @@ private:
 	std::vector<ThreadItem*> m_threadVector;   //辅助线程容器	
 	pthread_mutex_t   m_sendMessageQueueMutex; //发消息队列互斥量 
 	pthread_mutex_t   m_recvMessageQueueMutex; //收消息队列互斥量
-	sem_t             m_semEventSendQueue;     //处理发消息线程相关的信号量
 
-	std::atomic<int>  onlineUserCount; //当前在线用户数统计相关
+	static std::atomic<int>  onlineUserCount; //当前在线用户数统计相关
 
 protected:
 	//=============================================================================================
@@ -326,7 +347,9 @@ protected:
 	static int  m_RecyConnWaitTime; //回收连接等待时间
 	static int  m_worker_connections; //epoll连接的最大项数
 	static int	m_ListenPortCount; //所监听的端口数量
-	//=============================================================================================  
+	static int  IOThreadCount; //IO处理线程池线程数量
+	static int  connBuffSize; //每个连接所分配的收消息缓冲区大小
+	//============================================================================================= 
 
 public: //一些消息队列和连接队列
 	static ATOMIC_QUEUE  recvMsgQueue; //must be atomic locked when handling
@@ -340,7 +363,9 @@ public: //一些消息队列和连接队列
 
 	static ATOMIC_QUEUE2 recyConnQueue; //must be atomic locked when handling
 	static int           connLOCK;		 //atomic lock variable
-	static sem_t		 semRecyConnQueue; //the semaphore for handling recyConnQueue
+
+	static sem_t	   semRecyConnQueue; //the semaphore for handling recyConnQueue
+	static sem_t       semEventSendQueue; //the semaphore for handling sendMsgQueue
 	//=============================================================================================
 };
 

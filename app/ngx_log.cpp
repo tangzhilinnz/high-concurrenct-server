@@ -80,7 +80,7 @@ void ngx_log_stderr(int err, const char* fmt, ...)
         //errstr本身已经带\n，ngx_log_error_core函数还会在errstr后包一个\n，
         //所以写到日志中会有一个空行多出来
         err = 0;    //不要再次把错误信息弄到字符串里，否则字符串里重复了
-        ngx_log_error_core(NGX_LOG_STDERR, err, (const char*)errstr);
+        ngx_log_error_core(/*NGX_LOG_STDERR*/NGX_LOG_DEBUG, err, (const char*)errstr);
     }
 
     return;

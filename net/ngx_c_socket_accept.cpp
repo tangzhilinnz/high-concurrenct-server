@@ -67,7 +67,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         //我的结论是：accept4可以认为基本解决惊群问题，但似乎并没有完全解决，有时候还
         //会惊动其他的worker进程
     
-        if(s == -1)
+        /*if(s == -1)
         {
             ngx_log_stderr(
                 0, "thundering herd test: In CSocket::ngx_event_accept, "
@@ -78,7 +78,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
             ngx_log_stderr(
                 0, "thundering herd test: In CSocket::ngx_event_accept, "
                 "func accept succeeded(pid = %d)!", ngx_pid);
-        }      
+        }      */
 
         if (s == -1)
         {
@@ -121,11 +121,11 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
                 level = NGX_LOG_CRIT;
             }
 
-            if (use_accept4)
+            /*if (use_accept4)
             {
                 ngx_log_error_core(level, errno,
                     "In CSocket::ngx_event_accept, func accept4 failed!");
-            }
+            }*/
 
             if (use_accept4 && err == ENOSYS) //accept4函数没实现
             {
@@ -145,11 +145,11 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
                 //到listen socket上去；
             }
 
-            if (!use_accept4)
+            /*if (!use_accept4)
             {
                 ngx_log_error_core(level, errno,
                     "In CSocket::ngx_event_accept, func accept failed!");
-            }
+            }*/
 
             return;
         }
@@ -180,7 +180,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
             return;
         }
 
-        ngx_log_stderr(0, "accept(%d) succeeded!", s);  //s这里就是一个句柄了
+        //ngx_log_stderr(0, "accept(%d) succeeded!", s);  //s这里就是一个句柄了
         newc = ngx_get_connection(s); //这是针对新连入用户的连接，和监听套接字所对应
                                       //的连接是两个不同的socket
         if (newc == NULL)
@@ -192,9 +192,9 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
                 ngx_log_error_core(NGX_LOG_ALERT, errno, 
                     "In CSocekt::ngx_event_accept, close(%d) failed!", s);
             }
-            ngx_log_stderr(0,
+            /*ngx_log_stderr(0,
                 "there is no free connection in m_freeconnectionList, "
-                "connection request failed for socket(%d)!", s);
+                "connection request failed for socket(%d)!", s);*/
             return;
         }
 
@@ -202,7 +202,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         memcpy(&newc->s_sockaddr, &mysockaddr, socklen); //拷贝客户端地址到连接对象
         //将收到的地址弄成字符串，格式形如"192.168.1.126:40904"或者"192.168.1.126"      
         ngx_sock_ntop(&newc->s_sockaddr, 1, (u_char*)newc->addr_text, 100);
-        ngx_log_stderr(0, "Established connection with ip:%s", newc->addr_text);
+        //ngx_log_stderr(0, "Established connection with ip:%s", newc->addr_text);
 
         if (!use_accept4)
         {
@@ -224,8 +224,22 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
         //设置数据发送时的写处理函数
         newc->whandler = &CSocket::ngx_write_request_handler;
 
+        int minConnCountIndex = 0/*IOThreads[0].connCount*/;
+        int minConnCount = IOThreads[0].connCount;
+        for (int i = 1; i < IOThreadCount; i++)
+        {
+            if (IOThreads[i].connCount < minConnCount)
+            {
+                minConnCountIndex = i;
+                minConnCount = IOThreads[i].connCount;
+            }
+        }
+
+        newc->pIOthread = &IOThreads[minConnCountIndex];
+
         //客户端应该主动发送第一次的数据，这里将读事件加入epoll监控                                                      
         if (ngx_epoll_oper_event(
+            newc->pIOthread->epollHandle,
             s,                    //socekt句柄
             EPOLL_CTL_ADD,        //事件类型，这里是增加
             EPOLLIN | EPOLLRDHUP, //增加标志，EPOLLIN(可读)，EPOLLRDHUP(TCP连接的远端关闭或半关闭)
@@ -237,6 +251,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
             ngx_close_connection(newc); //回收连接池中的连接，并关闭socket
             return; //直接返回
         }
+        ++(newc->pIOthread->connCount);
 
         /*
         else
