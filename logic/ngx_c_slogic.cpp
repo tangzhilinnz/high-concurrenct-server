@@ -107,7 +107,7 @@ CLogicSocket::threadRecvProcFunc(char* pMsgBuf)
         if (pPkgHeader->crc32 != 0) 
         {
             ngx_log_stderr(0, "In CLogicSocket::threadRecvProcFunc, "
-                "CRC check failed and data discarded!");
+                "CRC check failed and data without body discarded!");
             //_HandleWrongPKG(pMsgHeader);
             return; //crc错，直接丢弃
         }
@@ -130,7 +130,7 @@ CLogicSocket::threadRecvProcFunc(char* pMsgBuf)
                                           //过来的包头中的crc32信息比较
         {
             ngx_log_stderr(0, "In CLogicSocket::threadRecvProcFunc, "
-                "CRC check failed and data discarded!");
+                "CRC check failed and data with body discarded !");
             //_HandleWrongPKG(pMsgHeader);
             return; //crc错，直接丢弃
         }
@@ -162,8 +162,8 @@ CLogicSocket::threadRecvProcFunc(char* pMsgBuf)
 
     //一切正确，可以放心大胆的处理了
     //(3)调用消息码对应的成员函数来处理
-    (this->*statusHandler[imsgCode])(p_Conn, pMsgHeader, (char*)pPkgBody,
-        pkglen - lenPkgHeader/*message body length*/);
+    //(this->*statusHandler[imsgCode])(p_Conn, pMsgHeader, (char*)pPkgBody,
+    //    pkglen - lenPkgHeader/*message body length*/);
 
     return;
 

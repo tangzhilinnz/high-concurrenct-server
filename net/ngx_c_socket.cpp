@@ -25,11 +25,11 @@ int CSocket::recvLOCK = 0;
 int CSocket::sendLOCK = 0;
 int CSocket::connLOCK = 0;
 
-ATOMIC_QUEUE  CSocket::recvMsgQueue;  //must be atomic locked when handling
-ATOMIC_QUEUE  CSocket::sendMsgQueue;  //must be atomic locked when handling
-ATOMIC_QUEUE  CSocket::sendingQueue;  //no need for atomic lock while only 
+MESSAGE_QUEUE  CSocket::recvMsgQueue;  //must be atomic locked when handling
+MESSAGE_QUEUE  CSocket::sendMsgQueue;  //must be atomic locked when handling
+MESSAGE_QUEUE  CSocket::sendingQueue;  //no need for atomic lock while only 
                                       //handled by send thread
-ATOMIC_QUEUE2 CSocket::recyConnQueue; //must be atomic locked when handling
+MESSAGE_QUEUE2 CSocket::recyConnQueue; //must be atomic locked when handling
 
 sem_t CSocket::semRecyConnQueue;  //the semaphore for handling recyConnQueue
 sem_t CSocket::semEventSendQueue; //the semaphore for handling sendMsgQueue
@@ -41,7 +41,7 @@ int CSocket::m_free_connection_n = 0;      //连接池空闲连接数
 
 IOthreadCache* CSocket::IOThreads = NULL;
 
-//========================================配置相关========================================
+//========================================配置相关==============================
 int CSocket::m_ifkickTimeCount = 0; //是否开启踢人时钟，1：开启，0：不开启
 int CSocket::m_ifTimeOutKick = 0;  //当时间到达Sock_MaxWaitTime指定的时间时，直接把客户端踢出去；
                                    //只有当Sock_WaitTimeEnable=1时，本项才有用
@@ -52,7 +52,7 @@ int CSocket::m_worker_connections = 1; //epoll连接的最大项数
 int	CSocket::m_ListenPortCount = 2; //所监听的端口数量
 int CSocket::IOThreadCount = 4;  //IO处理线程池线程数量
 int CSocket::connBuffSize = 1024; //每个连接所分配的收消息缓冲区大小
-//========================================配置相关========================================
+//========================================配置相关==============================
 
 
 //构造函数
@@ -64,7 +64,7 @@ CSocket::CSocket()
     //m_RecyConnWaitTime = 5000; //等待这么些秒后才回收连接
 
     //epoll相关
-    m_epollHandle = -1;            //epoll返回的句柄
+    epollHandleListen = -1;            //epoll返回的句柄
 
     //一些和网络通讯有关的常用变量值，供后续频繁使用时提高效率
     lenPkgHeader = sizeof(COMM_PKG_HEADER);  //包头的sizeof值(占用的字节数)
@@ -75,7 +75,7 @@ CSocket::CSocket()
     m_iRecvMsgQueueCount = 0;     //收消息队列大小
     m_iSendMsgQueueCount = 0;     //发消息队列大小
 
-    //=============================================================================================
+    //=========================================================================
     recvMsgQueue.head = NULL;
     recvMsgQueue.tail = NULL;
     recvMsgQueue.size = 0;
@@ -95,7 +95,7 @@ CSocket::CSocket()
     //freeConnList.head2 = NULL;
     //freeConnList.tail2 = NULL;
     //freeConnList.size2 = 0;
-    //=============================================================================================
+    //=========================================================================
 
     //m_recycling_connection_n = 0; //待释放连接队列大小
 
@@ -130,9 +130,9 @@ CSocket::SetandStartPrint(void) //设置屏幕打印定时器
     return true;
 }
 
-//各种清理函数----------------------------------------------------------------------------
+//各种清理函数--------------------------------------------------------------
 //清理TCP接收消息队列
-//=============================================================================================
+//=========================================================================
 void CSocket::clearMsgRecvQueue()
 {
     //char* sTmpMempoint;
@@ -156,7 +156,7 @@ void CSocket::clearMsgRecvQueue()
     recvMsgQueue.tail = NULL;
     recvMsgQueue.size = 0;
 }
-//=============================================================================================
+//=========================================================================
 //清理TCP发送消息队列
 void CSocket::clearMsgSendQueue()
 {
@@ -189,7 +189,7 @@ void CSocket::clearMsgSendQueue()
     sendingQueue.tail = NULL;
     sendingQueue.size = 0;
 }
-//=============================================================================================
+//=========================================================================
 
 //初始化函数, 在worker进程最开始调用(即fork()子进程之前)
 //成功返回true，失败返回false
@@ -205,7 +205,7 @@ CSocket::Initialize()
 bool 
 CSocket::Initialize_subproc()
 {
-    //=============================================================================================
+    //=========================================================================
     onlineUserCount = 0;    //在线用户数量统计，先给0
     int err;
     //收息互斥量初始化
@@ -216,7 +216,7 @@ CSocket::Initialize_subproc()
             "pthread_mutex_init(&m_recvMessageQueueMutex) failed!");
         return false;
     }
-    //=============================================================================================
+    //=========================================================================
     //发消息互斥量初始化
     err = pthread_mutex_init(&m_sendMessageQueueMutex, NULL);
     if (err != 0)
@@ -225,7 +225,7 @@ CSocket::Initialize_subproc()
             "pthread_mutex_init(&m_sendMessageQueueMutex) failed!");
         return false;
     }
-    //=============================================================================================
+    //=========================================================================
     //空闲连接相关互斥量初始化
     err = pthread_mutex_init(&freeConnListMutex, NULL);
     if (err != 0)
@@ -234,7 +234,7 @@ CSocket::Initialize_subproc()
             "pthread_mutex_init(&freeConnListMutex) failed!");
         return false;
     }
-    //=============================================================================================
+    //=========================================================================
     //连接回收队列相关互斥量初始化
     //err = pthread_mutex_init(&recyConnMutex, NULL);
     //if (err != 0)
@@ -243,7 +243,7 @@ CSocket::Initialize_subproc()
     //        "pthread_mutex_init(&recyConnMutex) failed!");
     //    return false;
     //}
-    //=============================================================================================
+    //=========================================================================
 
     //初始化发消息相关信号量，信号量用于进程/线程之间的同步，虽然互斥量
     //[pthread_mutex_lock]和条件变量[pthread_cond_wait]都是线程之间的同步手段，
@@ -257,31 +257,15 @@ CSocket::Initialize_subproc()
         return false;
     }
 
-    if (sem_init(&semRecyConnQueue, 0, 0) == -1)
-    {
-        ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
-            "sem_init(&semEventSendQueue) failed!");
-        return false;
+    //if (sem_init(&semRecyConnQueue, 0, 0) == -1)
+    //{
+    //    ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
+    //        "sem_init(&semEventSendQueue) failed!");
+    //    return false;
+    //}
+    //=========================================================================           
 
-    }
-    //=============================================================================================
-
-    //根据配置文件ProcIOWorkThreadCount，创建对应个数的IOthreadCache
-    IOThreads = new IOthreadCache[IOThreadCount];
-    if (IOThreads == NULL)
-    {
-        ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
-            "creating IOThreads failed!");
-        return false;
-    }
-
-    for (int i = 0; i < IOThreadCount; i++)
-    {
-        IOThreads[i].epollHandle = 0;
-        IOThreads[i].connCount = 0;
-    }
-
-    //创建线程----------------------------------------------------------------------------
+    //创建线程
     ThreadItem* pSendQueue;     //专门用来发送数据的线程
     m_threadVector.push_back(pSendQueue = new ThreadItem(this)); 
     err = pthread_create(&pSendQueue->_Handle, NULL, 
@@ -293,14 +277,23 @@ CSocket::Initialize_subproc()
         return false;
     }
 
-    ThreadItem* pRecyConn;      //专门用来回收连接的线程
-    m_threadVector.push_back(pRecyConn = new ThreadItem(this));
-    err = pthread_create(&pRecyConn->_Handle, NULL,
-        ServerRecyConnThread, pRecyConn);
-    if (err != 0)
+    //ThreadItem* pRecyConn;      //专门用来回收连接的线程
+    //m_threadVector.push_back(pRecyConn = new ThreadItem(this));
+    //err = pthread_create(&pRecyConn->_Handle, NULL,
+    //    ServerRecyConnThread, pRecyConn);
+    //if (err != 0)
+    //{
+    //    ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
+    //        "func pthread_create_2 failed!");
+    //    return false;
+    //}
+
+    //根据配置文件ProcIOWorkThreadCount，创建对应个数的IOthreadCache
+    IOThreads = new IOthreadCache[IOThreadCount];
+    if (IOThreads == NULL)
     {
-        ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
-            "func pthread_create_2 failed!");
+        ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
+            "creating IOThreads failed!");
         return false;
     }
 
@@ -308,27 +301,50 @@ CSocket::Initialize_subproc()
     int threadConnCount = m_worker_connections / IOThreadCount;
     for (int i = 0; i < IOThreadCount; i++)
     {
+        memset(IOThreads + i, 0, sizeof(IOthreadCache));
+        IOThreads[i].evtfd == -1;
+        //创建eventfd对象
+        IOThreads[i].evtfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+        if (IOThreads[i].evtfd == -1)
+        {
+            ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
+                "eventfd() invoking failed!");
+            return false;
+        }
+        //IOThreads[i].epollHandle = 0;
+        //IOThreads[i].connCount = 0;
+        //IOThreads[i].pConnEFD = NULL;
+        //IOThreads[i].connEventQueue.phead = NULL;
+        //IOThreads[i].connEventQueue.ptail = NULL;
+        //IOThreads[i].connEventQueue.size = 0;
+        //IOThreads[i].atomicLock = 0;
+
         IOThreads[i].epollHandle = epoll_create(threadConnCount);
+        if (IOThreads[i].epollHandle == -1)
+        {
+            ngx_log_stderr(errno, "In CSocket::Initialize_subproc(), "
+                "epoll_create() invoking failed!");
+            return false;
+        }
         m_threadVector.push_back(pIOThread = new ThreadItem(this));
-        //pIOThread->_threadNum = i;
-        pIOThread->_epollHandle = IOThreads[i].epollHandle;
+
+        pIOThread->_pIOThread = &IOThreads[i];
 
         err = pthread_create(&pIOThread->_Handle, NULL,
             ServerIOThread, pIOThread);
         if (err != 0)
         {
             ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
-                "func pthread_create failed!");
+                "pthread_create() invoking failed!");
             return false;
         }
         usleep(10 * 1000);
     }
 
-
     if (!SetandStartPrint())
     {
         ngx_log_stderr(err, "In CSocket::Initialize_subproc(), "
-            "func SetandStartPrint failed!");
+            "SetandStartPrint() invoking failed!");
     }
 
     return true;
@@ -341,17 +357,34 @@ CSocket::Shutdown_subproc()
     //(1)把干活线程停止掉，注意系统应该尝试通过设置g_stopEvent = 1来启动整个项目停止
     //用到信号量sem_post的，可能还需要调用一下sem_post
     g_stopEvent = 1;
+
+    //给每个线程的evtfd发送消息，从而唤醒epoll，让线程结束
+    if (IOThreads != NULL)
+    {
+
+        for (int i = 0; i < IOThreadCount; i++)
+        {
+            uint64_t one = 1;
+            int evtfd = IOThreads[i].evtfd;
+            ssize_t n = write(evtfd, &one, sizeof(uint64_t));
+            if (n != sizeof(uint64_t))
+            {
+                ngx_log_stderr(errno, "In CSocekt::ThreadEventNotify(), "
+                    "write() falied to write 8 bytes!");
+            }
+        }
+    }
     if (sem_post(&semEventSendQueue) == -1)  //让ServerSendQueueThread线程运行
     {
         ngx_log_stderr(0, "In CSocekt::Shutdown_subproc, "
             "func sem_post(&semEventSendQueue) failed!");
     }
 
-    if (sem_post(&semRecyConnQueue) == -1)  //让ServerRecyConnThread线程运行
-    {
-        ngx_log_stderr(0, "In CSocekt::Shutdown_subproc, "
-            "func sem_post(&semRecyConnQueue) failed!");
-    }
+    //if (sem_post(&semRecyConnQueue) == -1)  //让ServerRecyConnThread线程运行
+    //{
+    //    ngx_log_stderr(0, "In CSocekt::Shutdown_subproc, "
+    //        "func sem_post(&semRecyConnQueue) failed!");
+    //}
 
     std::vector<ThreadItem*>::iterator iter;
     for (iter = m_threadVector.begin(); iter != m_threadVector.end(); iter++)
@@ -373,10 +406,60 @@ CSocket::Shutdown_subproc()
     clearMsgRecvQueue();
     clearconnection();
 
-    if (IOThreads != NULL) delete[] IOThreads;
-    IOThreads = NULL;
+    if (IOThreads != NULL) //IOThreads动态内存清理
+    {
+        //关闭每一个线程缓存里由epoll_create()和eventfd()创建的句柄
+        //连接事件队列若还有节点，则需释放
+        for (int i = 0; i < IOThreadCount; i++)
+        {
+            if (IOThreads[i].epollHandle != -1)
+            {
+                if (close(IOThreads[i].epollHandle) == -1)
+                {
+                    ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
+                        "close() invoking for IOThreads[%d].epollHandle failed!", 
+                        i);
+                }
+                IOThreads[i].epollHandle = -1; //-1代表已经被关闭了一次
+            }
 
-    //=============================================================================================
+            if (IOThreads[i].evtfd != -1)
+            {
+                if (close(IOThreads[i].evtfd) == -1)
+                {
+                    ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
+                        "close() invoking for IOThreads[%d].evtfd failed!",
+                        i);
+                }
+                IOThreads[i].evtfd = -1; //-1代表已经被关闭了一次
+            }
+
+            CONN_EVENT* pconnEvent;
+            while (IOThreads[i].connEventQueue.phead)
+            {
+                pconnEvent = IOThreads[i].connEventQueue.phead;
+                IOThreads[i].connEventQueue.phead = 
+                    IOThreads[i].connEventQueue.phead->next;
+                free(pconnEvent);
+            }
+        }
+
+        delete[] IOThreads;
+        IOThreads = NULL; //NULL代表已经被关闭了一次
+    }
+
+    //关闭epollHandleListen
+    if (epollHandleListen != -1)
+    {
+        if (close(epollHandleListen) == -1)
+        {
+            ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
+                "close() invoking for epollHandleListen failed!");
+        }
+        epollHandleListen = -1; //-1代表已经被关闭了一次
+    }
+
+    //=========================================================================
     //(4)多线程相关
     int err;
     err = pthread_mutex_destroy(&m_recvMessageQueueMutex); //收消息互斥量释放
@@ -385,14 +468,14 @@ CSocket::Shutdown_subproc()
         ngx_log_stderr(err, "In CSocket::Shutdown_subproc(), "
             "pthread_mutex_destroy(&m_recvMessageQueueMutex) failed!");
     }
-    //=============================================================================================
+    //=========================================================================
     err = pthread_mutex_destroy(&m_sendMessageQueueMutex); //发消息互斥量释放
     if (err != 0)
     {
         ngx_log_stderr(err, "In CSocket::Shutdown_subproc(), "
             "pthread_mutex_destroy(&m_sendMessageQueueMutex) failed!");
     }
-    //=============================================================================================
+    //=========================================================================
     err = pthread_mutex_destroy(&freeConnListMutex);       //连接相关互斥量释放
     if (err != 0)
     {
@@ -406,7 +489,7 @@ CSocket::Shutdown_subproc()
     //        "pthread_mutex_destroy(&recyConnMutex) failed!");
     //}
 
-    //=============================================================================================
+    //=========================================================================
     if (sem_destroy(&semEventSendQueue) == -1)            //发消息相关线程信号量释放
     {
         ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
@@ -417,7 +500,7 @@ CSocket::Shutdown_subproc()
         ngx_log_stderr(errno, "In CSocket::Shutdown_subproc(), "
             "sem_destroy(&semRecyConnQueue) failed!");
     }
-    //=============================================================================================
+    //=========================================================================
 }
 
 //专门用于读各种配置项
@@ -610,7 +693,7 @@ CSocket::ngx_close_listening_sockets()
         //Can not call close twice for one opened fd,
         //The first call should return 0; 
         //the second call should return -1, and set errno to EBADF
-        if (close((*pos)->fd) == -1)
+        if (close((*pos)->fd) == -1) 
         {
             ngx_log_error_core(NGX_LOG_ALERT, errno,
                 "In CSocket::ngx_close_listening_sockets(), "
@@ -629,7 +712,7 @@ CSocket::ngx_close_listening_sockets()
     return;
 }
 
-//=============================================================================================
+//=============================================================================
 //将一个待发送消息入到发消息队列中，处理收消息线程池中的每个线程会调用此函数
 void 
 CSocket::msgSend(char* psendbuf)
@@ -664,18 +747,16 @@ CSocket::msgSend(char* psendbuf)
     //{
     //    //这个连接存在只发不收的异常，导致服务器该连接的发送缓冲区已经溢出，
     //    //需要关闭该异常连接
-    //    //=========================================================================================
+    //    //===================================================================
     //    ngx_log_stderr(0, "In CSocekt::msgSend, [tid = %d]"
     //        "one connection sendCount(%d) exceeded 1000, "
     //        "the server will close the connection!",
     //        pthread_self() ,p_Conn->sendCount);
     //    ngx_recycle_connection(p_Conn);
-    //    //=========================================================================================
+    //    //===================================================================
     //    free(psendbuf);
     //    return;
     //}
-
-    //__sync_fetch_and_add(&p_Conn->sendCount, 1);
 
     while (__sync_lock_test_and_set(&sendLOCK, 1))
     { usleep(0);}
@@ -707,18 +788,18 @@ CSocket::msgSend(char* psendbuf)
 
     return;
 }
-//=============================================================================================
+//=============================================================================
 
-//---------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 //(1)epoll功能初始化，子进程中进行，本函数被ngx_worker_process_init()所调用
 int 
 CSocket::ngx_epoll_init()
 {
     //(1)很多内核版本不处理epoll_create的参数，只要该参数>0即可
     //创建一个epoll对象，创建了一个红黑树，还创建了一个双向链表
-    m_epollHandle = epoll_create(m_worker_connections); //直接以epoll连接的最大项
+    epollHandleListen = epoll_create(m_worker_connections); //直接以epoll连接的最大项
                                                         //数为参数，肯定是>0的； 
-    if (m_epollHandle == -1)
+    if (epollHandleListen == -1)
     {
         ngx_log_stderr(errno,
             "In CSocket::ngx_epoll_init(), func epoll_create failed!");
@@ -728,7 +809,43 @@ CSocket::ngx_epoll_init()
     //(2)创建连接池，后续用于处理所有客户端的连接
     initconnection();
 
-    //(3)遍历所有 监听socket，为每个 监听socket 增加一个连接池中的连接
+    //(3)遍历所有动态分配的IOthreadCache对象，为每一个对象的evtfd成员分配一个连接，
+    //并将这个连接地址保存到pConnEFD成员
+    for (int i = 0; i < IOThreadCount; i++)
+    {
+        if (IOThreads[i].evtfd == -1)
+        {
+            ngx_log_stderr(errno, "In CSocket::ngx_epoll_init(), "
+                "there is a IOthreadCache object, "
+                "whose evtfd member is not initialized correctly!");
+            exit(2); //有问题，直接退出，资源由系统释放
+        }
+        //从连接池中获取一个空闲连接对象并赋值给pConnEFD成员
+        IOThreads[i].pConnEFD = ngx_get_connection(IOThreads[i].evtfd);
+        if (IOThreads[i].pConnEFD == NULL)
+        {
+            ngx_log_stderr(errno, "In CSocket::ngx_epoll_init(), "
+                "ngx_get_connection() failed to fetch a connection for evtfd!");
+            exit(2); //有问题，直接退出，资源由系统释放
+        }
+        IOThreads[i].pConnEFD->pIOthread = &IOThreads[i];
+        //对evtfd的读事件设置处理方法，写事件不用设置，直接用write()函数写
+        IOThreads[i].pConnEFD->rhandler = &CSocket::ThreadEventRespond;
+
+        if (ngx_epoll_oper_event(
+            IOThreads[i].epollHandle,
+            IOThreads[i].evtfd,    //socekt句柄
+            EPOLL_CTL_ADD,         //事件类型，这里是增加
+            EPOLLIN /*| EPOLLRDHUP*/,  //增加标志，EPOLLIN(可读)，EPOLLRDHUP(TCP连接的远端关闭或半关闭)
+            0,                     //对于事件类型为增加的，不需要这个参数
+            IOThreads[i].pConnEFD  //连接池中的连接 
+        ) == -1)
+        {
+            exit(2); //有问题，直接退出，资源由系统释放，日志已经写过了
+        }
+    }
+
+    //(4)遍历所有 监听socket，为每个 监听socket 增加一个连接池中的连接
     //(即让每个 监听socket 和一段内存绑定，以方便记录该sokcet相关数据、状态等)
     std::vector<lpngx_listening_t>::iterator pos;
     for (pos = m_ListenSocketList.begin(); pos != m_ListenSocketList.end(); ++pos)
@@ -737,17 +854,17 @@ CSocket::ngx_epoll_init()
         lpngx_connection_t p_Conn = ngx_get_connection((*pos)->fd);
         p_Conn->listening = (*pos); //连接对象和监听对象关联，通过连接对象找监听对象
         (*pos)->p_connection = p_Conn; //监听对象和连接对象关联，通过监听对象找连接对象
-        //p_Conn->epollHandle = m_epollHandle;
+        //p_Conn->epollHandle = epollHandleListen;
 
         //对监听端口的读事件设置处理方法，因为监听端口是用来等对方连接时发送三路握手的，
         //所以监听端口关心的就是读事件
         p_Conn->rhandler = &CSocket::ngx_event_accept;
 
         //往监听socket上增加监听事件，从而开始让监听端口履行其职责，如果不加这行，
-        //虽然端口能连上，但不会触发ngx_epoll_process_events()里边的epoll_wait()
+        //虽然端口能连上，但不会触发EpollProcessIO()里边的epoll_wait()
         //往下走
         if (ngx_epoll_oper_event(
-            m_epollHandle,
+            epollHandleListen,
             (*pos)->fd,           //socekt句柄
             EPOLL_CTL_ADD,        //事件类型，这里是增加
             EPOLLIN | EPOLLRDHUP, //增加标志，EPOLLIN(可读)，EPOLLRDHUP(TCP连接的远端关闭或半关闭)
@@ -869,7 +986,8 @@ CSocket::ngx_epoll_oper_event(
 //返回值1：正常返回，0：有问题返回，但不管是正常还是问题返回，都应该保持进程继续运行
 //本函数被ngx_process_events_and_timers()调用，其在子进程的死循环中被反复调用
 int 
-CSocket::ngx_epoll_process_events(int timer)
+CSocket::EpollProcessIO(int epollHandle, struct epoll_event myEvents[], 
+    int maxEvents, int timer)
 {
     //等待事件，事件会返回到m_events里，最多返回NGX_MAX_EVENTS个事件；
     //如果两次调用epoll_wait的事件间隔比较长，则可能在epoll的双向链表中，积累了多个
@@ -885,9 +1003,9 @@ CSocket::ngx_epoll_process_events(int timer)
     //如果你等待的是一段时间，并且超时了timer，则返回0；
     //如果返回>0则表示成功捕获到这么多个事件(返回值里)
     //epoll_wait第三个参数maxevents的值不能大于大于epoll_create时的size
-    int events = epoll_wait(m_epollHandle, m_events, NGX_MAX_EVENTS, timer);
+    int eventCount = epoll_wait(epollHandle, myEvents, maxEvents, timer);
 
-    if (events == -1)
+    if (eventCount == -1)
     {
         //有错误发生，发送某个信号给本进程就可以导致这个条件成立，而且错误码根据观察是4
         //#define EINTR 4，EINTR错误的产生：当阻塞于某个慢系统调用的一个进程捕获某个
@@ -900,7 +1018,7 @@ CSocket::ngx_epoll_process_events(int timer)
             //信号所致，直接返回，一般认为这不是毛病，但还是打印下日志记录一下，
             //因为一般也不会人为给worker进程发送消息
             ngx_log_error_core(NGX_LOG_INFO, errno,
-                "In CSocket::ngx_epoll_process_events, func epoll_wait failed!");
+                "In CSocket::EpollProcessIO, func epoll_wait failed!");
 
             return 1;  //正常返回
         }
@@ -908,13 +1026,13 @@ CSocket::ngx_epoll_process_events(int timer)
         {
             //这被认为应该是有问题，记录日志
             ngx_log_error_core(NGX_LOG_ALERT, errno,
-                "In CSocket::ngx_epoll_process_events, func epoll_wait failed!");
+                "In CSocket::EpollProcessIO, func epoll_wait failed!");
 
             return 0;  //非正常返回 
         }
     }
 
-    if (events == 0) //超时，但没事件来
+    if (eventCount == 0) //超时，但没事件来
     {
         if (timer != -1)
         {
@@ -923,7 +1041,7 @@ CSocket::ngx_epoll_process_events(int timer)
         }
         //无限等待，所以不存在超时，但却没返回任何事件，这应该不正常有问题        
         ngx_log_error_core(NGX_LOG_ALERT, 0,
-            "In CSocket::ngx_epoll_process_events, func epoll_wait failed, "
+            "In CSocket::EpollProcessIO, func epoll_wait failed, "
             "no timeout and no event!");
 
         return 0; //非正常返回 
@@ -933,22 +1051,22 @@ CSocket::ngx_epoll_process_events(int timer)
     //ngx_log_stderr(errno, "惊群测试1:%d",events); 
 
     //走到这里，就是属于有事件收到了
-    lpngx_connection_t p_Conn;
+    lpngx_connection_t pConn;
     uintptr_t          instance;
     uint32_t           revents;
 
-    for (int i = 0; i < events; ++i) //注意events才是返回的实际事件数量
+    for (int i = 0; i < eventCount; ++i) //注意events才是返回的实际事件数量
     {
-        p_Conn = (lpngx_connection_t)(m_events[i].data.ptr);
-        instance = (uintptr_t)p_Conn & 1; //将地址的最后一位取出来，用instance变量
+        pConn = (lpngx_connection_t)(myEvents[i].data.ptr);
+        instance = (uintptr_t)pConn & 1; //将地址的最后一位取出来，用instance变量
                                           //标识，见ngx_epoll_oper_event，该值是当
                                           //时随着连接池中的连接一起给进来的，取得的
                                           //是你当时调用ngx_epoll_oper_event的时候，
                                           //这个连接里边的instance变量的值
-        p_Conn = (lpngx_connection_t)((uintptr_t)p_Conn & (uintptr_t)~1);
+        pConn = (lpngx_connection_t)((uintptr_t)pConn & (uintptr_t)~1);
 
         //过滤过期事件1
-        if (p_Conn->fd == -1) //当关联一个连接池中的连接对象时，这个套接字值是要给到
+        if (pConn->fd == -1) //当关联一个连接池中的连接对象时，这个套接字值是要给到
                        //p_Conn->fd；ngx_close_connection或ngx_recycle_connection
                               //函数中会把文件p_Conn关闭，并且把p_Conn会被设置为-1
         {
@@ -956,12 +1074,12 @@ CSocket::ngx_epoll_process_events(int timer)
             //连接关闭，p_Conn->fd会被设置为-1；第二个事件照常处理；假如第三个事件也跟
             //第一个事件对应的是同一个连接，那这个条件就成立；这属于过期事件，不处理
             ngx_log_error_core(NGX_LOG_DEBUG, 0, 
-                "In CSocket::ngx_epoll_process_events, "
-                "an expiration event was encountered, fd==-1:%p.", p_Conn);
+                "In CSocket::EpollProcessIO, "
+                "an expiration event was encountered, fd==-1:%p.", pConn);
             continue;
         }
         //过滤过期事件的2
-        if (p_Conn->instance != instance)
+        if (pConn->instance != instance)
         {
             //instance标志判断事件是否过期
             //a)处理第一个事件时，因为业务需要，我们把这个连接【假设套接字为50】关闭，
@@ -974,14 +1092,14 @@ CSocket::ngx_epoll_process_events(int timer)
             //解决这个问题，当调用ngx_get_connection从连接池中获取一个新连接时，我们把
             //instance标志位置反。所以这个条件如果成立，说明这个连接已经关闭后又重启了
             ngx_log_error_core(NGX_LOG_DEBUG, 0, 
-                "In CSocket::ngx_epoll_process_events, "
-                "an expiration event was encountered, instance reset:%p.", p_Conn);
+                "In CSocket::EpollProcessIO, "
+                "an expiration event was encountered, instance reset:%p.", pConn);
 
             continue;
         } //注意：过滤过期事件的2用于即关即用型连接池的过期事件判断，保留当学习
 
         //能走到这里，这些事件都没过期，就正常开始处理
-        revents = m_events[i].events; //取出事件类型
+        revents = myEvents[i].events; //取出事件类型
         /*
         if (revents & (EPOLLERR | EPOLLHUP)) //例如对方close掉套接字，这里会感应到
                                        //换句话说：如果发生了错误或者客户端非正常断连
@@ -1000,7 +1118,7 @@ CSocket::ngx_epoll_process_events(int timer)
         if (revents & EPOLLIN) //如果是读事件
         {
             //一个客户端新连入，对端正常关闭，已连接的socket发送数据来，这个会成立           
-            (this->*(p_Conn->rhandler))(p_Conn); //如果新连接进入，这里执行的应该是
+            (this->*(pConn->rhandler))(pConn); //如果新连接进入，这里执行的应该是
                                                  //CSocket::ngx_event_accept           
                                   //如果是已经连入，发送数据到这里，则这里执行的应该是 
                                               //CSocket::ngx_read_request_handler
@@ -1015,21 +1133,102 @@ CSocket::ngx_epoll_process_events(int timer)
                 //EPOLLHUP：对应的连接被挂起 16(0001 0000)
                 //EPOLLRDHUP：表示TCP连接的远端关闭或者半关闭连接 8192(0010 0000 0000 0000)
                 //8221 = ‭0010 0000 0001 1101‬：包括EPOLLRDHUP，EPOLLHUP，EPOLLERR
-                ngx_log_stderr(errno, "In CSocekt::ngx_epoll_process_events, "
+                ngx_log_stderr(errno, "In CSocekt::EpollProcessIO, "
                     "EPOLLOUT set up and (EPOLLERR|EPOLLHUP|EPOLLRDHUP) set up, "
                     "event=%Xd.", revents);
-                ngx_recycle_connection(p_Conn);
+                ngx_recycle_connection(pConn);
             }
             else
             {
                 //如果有数据没有发送完，由系统驱动来发送，CSocekt::ngx_write_request_handler
                 //其他情况则是，CSocekt::ngx_null_request_handler
-                (this->*(p_Conn->whandler))(p_Conn);   
+                (this->*(pConn->whandler))(pConn);   
             }
         }
     }
 
     return 1;
+}
+
+void  //处理IO线程的epoll事件
+CSocket::EpollProcessEvent(IOthreadCache* pIOThread)
+{
+    int* patomicLock = &(pIOThread->atomicLock);
+    CONN_EVENT_QUEUE* pconnEventQue = &(pIOThread->connEventQueue);
+    CONN_EVENT* pconnEventH = NULL;
+    CONN_EVENT* pconnEventH1;
+    CONN_EVENT* pconnEventT = NULL;
+    int size = 0;
+    lpngx_connection_t pConn;
+
+    //ATOMIC LCOK for this conn's thread connEventQueue 
+    while (__sync_lock_test_and_set(patomicLock, 1)) { usleep(0); }
+
+    //若连接消息队列为空，则不处理直接返回
+    if (pconnEventQue->phead == NULL)
+    {
+        //release ATOMIC LCOK FOR this conn's thread connEventQueue 
+        __sync_lock_release(patomicLock);
+        return;
+    }
+
+    pconnEventH = pconnEventQue->phead;
+    pconnEventT = pconnEventQue->ptail;
+    size = pconnEventQue->size;
+
+    pconnEventQue->phead = NULL;
+    pconnEventQue->ptail = NULL;
+    pconnEventQue->size = 0;
+
+    //release ATOMIC LCOK FOR this conn's thread connEventQueue 
+    __sync_lock_release(patomicLock);
+
+    while (pconnEventH)
+    {
+        pconnEventH1 = pconnEventH;
+        pconnEventH = pconnEventH->next;
+        pConn = pconnEventH1->pConn;
+
+        if (pConn->fd == -1)
+        {
+            free(pconnEventH1);
+            --size;
+            continue;
+        }
+
+
+        if (pconnEventH1->eType == E_CLOSE_CONN) {
+
+            if (close(pConn->fd) == -1)
+            {
+                ngx_log_error_core(NGX_LOG_ALERT, errno,
+                    "In CSocket::EpollProcessEvent(), invoking close() for %d failed!",
+                    pConn->fd);
+            }
+            pConn->fd = -1; //官方nginx这么写，这么写有意义
+            ++pConn->iCurrsequence;
+            --pIOThread->connCount; //该线程拥有pConn连接的IO线程连接数-1
+            --onlineUserCount; //连入用户数量-1
+
+            int tmp = onlineUserCount;
+            //=======================================test====================================
+            ngx_log_stderr(0, "(PID: %d) ngx_recycle_connection executed! The onlineUserCount: %d",
+                pthread_self(), tmp);
+            //=======================================test====================================
+            //首先让心跳包定时器失效(无论有没有创建，都可以调用)，
+            //再启动连接的idle定时器
+            //if (pSocketObj->m_ifkickTimeCount == 1)
+            timeWheel.DisableTimer(pConn->timerEntryPing);
+            timeWheel.StartTimer(pConn->timerEntryRecy);
+
+            free(pconnEventH1);
+            --size;
+        }
+    }
+
+    pconnEventT = NULL;
+
+    return;
 }
 
 void //从sendingQueue消息队列中弹出指定消息
@@ -1038,7 +1237,7 @@ CSocket::popSendingQueueMsg(LPSTRUC_MSG_HEADER msg)
     //发送队列无消息或者指定消息为空
     if (sendingQueue.head == NULL || msg == NULL) return; 
     //发送队列只有一条消息
-    if (sendingQueue.head == sendingQueue.tail)
+    if (sendingQueue.head != NULL && sendingQueue.head == sendingQueue.tail)
     {
         sendingQueue.head = NULL;
         sendingQueue.tail = NULL;
@@ -1075,155 +1274,150 @@ CSocket::ServerIOThread(void* threadData)
 {
     ThreadItem* pThread = static_cast<ThreadItem*>(threadData);
     CSocket* pCSocket = pThread->_pThis;
-    //int index = pThread->_threadNum;
-    int epollHandle = pThread->_epollHandle;
+    int epollHandle = pThread->_pIOThread->epollHandle;
+
     struct epoll_event  sEvents[NGX_MAX_EVENTS];
 
     while (g_stopEvent == 0/*1*/) //不退出
     {
-        //等待事件，事件会返回到m_events里，最多返回NGX_MAX_EVENTS个事件；
-        //如果两次调用epoll_wait的事件间隔比较长，则可能在epoll的双向链表中，积累了多个
-        //事件，所以调用epoll_wait，可能取到多个事件
-        //阻塞timer这么长时间除非：
-        //a)阻塞时间到达
-        //b)阻塞期间收到事件(比如新用户连入)会立刻返回
-        //c)调用时有事件也会立刻返回
-        //d)如果来个信号，比如你用kill -1 pid测试
-        //如果timer为-1则一直阻塞，如果timer为0则立即返回，即便没有任何事件
-        //返回值：有错误发生返回-1，错误在errno中，比如你发个信号过来，就返回-1，错误信息是
-        //(4: Interrupted system call)
-        //如果你等待的是一段时间，并且超时了timer，则返回0；
-        //如果返回>0则表示成功捕获到这么多个事件(返回值里)
-        //epoll_wait第三个参数maxevents的值不能大于大于epoll_create时的size
-        int events = epoll_wait(epollHandle, sEvents, NGX_MAX_EVENTS, -1);
-
-        if (events == -1)
-        {
-            //有错误发生，发送某个信号给本进程就可以导致这个条件成立，而且错误码根据观察是4
-            //#define EINTR 4，EINTR错误的产生：当阻塞于某个慢系统调用的一个进程捕获某个
-            //信号且相应信号处理函数返回时，该系统调用可能返回一个EINTR错误。
-            //例如：在socket服务器端，设置了信号捕获机制，有子进程，当在父进程阻塞于慢系统
-            //调用时由父进程捕获到了一个有效信号时，内核会致使accept返回一个EINTR错误
-            //(被中断的系统调用)。
-            if (errno == EINTR)
-            {
-                //信号所致，直接返回，一般认为这不是毛病，但还是打印下日志记录一下，
-                //因为一般也不会人为给worker进程发送消息
-                ngx_log_error_core(NGX_LOG_INFO, errno,
-                    "In CSocket::ServerIOThread, func epoll_wait failed!");
-                //return 1;  //正常返回
-            }
-            else
-            {
-                //这被认为应该是有问题，记录日志
-                ngx_log_error_core(NGX_LOG_ALERT, errno,
-                    "In CSocket::ServerIOThread, func epoll_wait failed!");
-                //return 0;  //非正常返回 
-            }
-        }
-
-        if (events == 0) //超时，但没事件来
-        {
-            //无限等待，所以不存在超时，但却没返回任何事件，这应该不正常有问题        
-            ngx_log_error_core(NGX_LOG_ALERT, 0,
-                "In CSocket::ServerIOThread, func epoll_wait failed, "
-                "no timeout and no event!");
-           //return 0; //非正常返回 
-        }
-
-        //走到这里，就是属于有事件收到了
-        lpngx_connection_t p_Conn;
-        uintptr_t          instance;
-        uint32_t           revents;
-
-        for (int i = 0; i < events; ++i) //注意events才是返回的实际事件数量
-        {
-            p_Conn = (lpngx_connection_t)(sEvents[i].data.ptr);
-            instance = (uintptr_t)p_Conn & 1; //将地址的最后一位取出来，用instance变量
-                                              //标识，见ngx_epoll_oper_event，该值是当
-                                              //时随着连接池中的连接一起给进来的，取得的
-                                              //是你当时调用ngx_epoll_oper_event的时候，
-                                              //这个连接里边的instance变量的值
-            p_Conn = (lpngx_connection_t)((uintptr_t)p_Conn & (uintptr_t)~1);
-
-            //过滤过期事件1
-            if (p_Conn->fd == -1) //当关联一个连接池中的连接对象时，这个套接字值是要给到
-                           //p_Conn->fd；ngx_close_connection或ngx_recycle_connection
-                                  //函数中会把文件p_Conn关闭，并且把p_Conn会被设置为-1
-            {
-                //假如用epoll_wait取得三个事件，处理第一个事件时，因为业务需要，我们把这个
-                //连接关闭，p_Conn->fd会被设置为-1；第二个事件照常处理；假如第三个事件也跟
-                //第一个事件对应的是同一个连接，那这个条件就成立；这属于过期事件，不处理
-                ngx_log_error_core(NGX_LOG_DEBUG, 0,
-                    "In CSocket::ServerIOThread, "
-                    "an expiration event was encountered, fd==-1:%p.", p_Conn);
-                continue;
-            }
-            //过滤过期事件的2
-            if (p_Conn->instance != instance)
-            {
-                //instance标志判断事件是否过期
-                //a)处理第一个事件时，因为业务需要，我们把这个连接【假设套接字为50】关闭，
-                //  同时设置c->fd = -1；并且调用ngx_close_connection将该连接归还给连接池；
-                //b)处理第二个事件，恰好第二个事件是建立新连接事件，调用ngx_get_connection
-                //  从连接池中取出的连接非常可能就是刚刚释放的第一个事件对应的连接池中的连接；
-                //c)又因为a中套接字50被释放了，所以会被操作系统拿来复用，复用给了b)；
-                //d)当处理第三个事件时，第三个事件其实已经过期的，不应该处理，此时连接池中的
-                //该连接实际上已经被用作第二个事件对应的socket上了；依靠instance标志位能够
-                //解决这个问题，当调用ngx_get_connection从连接池中获取一个新连接时，我们把
-                //instance标志位置反。所以这个条件如果成立，说明这个连接已经关闭后又重启了
-                ngx_log_error_core(NGX_LOG_DEBUG, 0,
-                    "In CSocket::ServerIOThread, "
-                    "an expiration event was encountered, instance reset:%p.", p_Conn);
-                continue;
-            } //注意：过滤过期事件的2用于即关即用型连接池的过期事件判断，保留当学习
-
-            //能走到这里，这些事件都没过期，就正常开始处理
-            revents = sEvents[i].events; //取出事件类型
-            /*
-            if (revents & (EPOLLERR | EPOLLHUP)) //例如对方close掉套接字，这里会感应到
-                                           //换句话说：如果发生了错误或者客户端非正常断连
-            {
-                revents |= EPOLLIN | EPOLLOUT; //EPOLLIN：表示对应的链接上有数据可以读出，
-                                               //TCP链接的远端主动关闭连接，也相当于可
-                                               //读事件，因为本服务器要处理发送来的FIN包
-                                               //EPOLLOUT：表示对应的连接上可以写入数据
-                                               //发送写准备好
-            }*/
-            //if (revents & EPOLLRDHUP) //补充一个客户端正常关闭检测
-            //{
-            //    ngx_recycle_connection(p_Conn);
-            //}
-
-            if (revents & EPOLLIN) //如果是读事件
-            {
-                //一个客户端新连入，对端正常关闭，已连接的socket发送数据来，这个会成立           
-                (pCSocket->*(p_Conn->rhandler))(p_Conn); //所有连接均已连入，发送数据到这里，这里执行是 
-                                                  //CSocket::ngx_read_request_handler
-            }
-
-            if (revents & EPOLLOUT) //如果是写事件
-            {
-                //客户端关闭，如果服务器端挂着一个写通知事件，则这里个条件是可能成立的
-                if (revents & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
-                {
-                    //EPOLLERR：对应的连接发生错误 8(1000) 
-                    //EPOLLHUP：对应的连接被挂起 16(0001 0000)
-                    //EPOLLRDHUP：表示TCP连接的远端关闭或者半关闭连接 8192(0010 0000 0000 0000)
-                    //8221 = ‭0010 0000 0001 1101‬：包括EPOLLRDHUP，EPOLLHUP，EPOLLERR
-                    ngx_log_stderr(errno, "In CSocekt::ServerIOThread, "
-                        "EPOLLOUT set up and (EPOLLERR|EPOLLHUP|EPOLLRDHUP) set up, "
-                        "event=%Xd.", revents);
-                    pCSocket->ngx_recycle_connection(p_Conn);
-                }
-                else
-                {
-                    //如果有数据没有发送完，由系统驱动来发送，CSocekt::ngx_write_request_handler
-                    //其他情况则是，CSocekt::ngx_null_request_handler
-                    (pCSocket->*(p_Conn->whandler))(p_Conn);
-                }
-            }
-        }
+        pCSocket->EpollProcessIO(epollHandle, sEvents, NGX_MAX_EVENTS, -1);
+        pCSocket->EpollProcessEvent(pThread->_pIOThread);
+        ////等待事件，事件会返回到m_events里，最多返回NGX_MAX_EVENTS个事件；
+        ////如果两次调用epoll_wait的事件间隔比较长，则可能在epoll的双向链表中，积累了多个
+        ////事件，所以调用epoll_wait，可能取到多个事件
+        ////阻塞timer这么长时间除非：
+        ////a)阻塞时间到达
+        ////b)阻塞期间收到事件(比如新用户连入)会立刻返回
+        ////c)调用时有事件也会立刻返回
+        ////d)如果来个信号，比如你用kill -1 pid测试
+        ////如果timer为-1则一直阻塞，如果timer为0则立即返回，即便没有任何事件
+        ////返回值：有错误发生返回-1，错误在errno中，比如你发个信号过来，就返回-1，错误信息是
+        ////(4: Interrupted system call)
+        ////如果你等待的是一段时间，并且超时了timer，则返回0；
+        ////如果返回>0则表示成功捕获到这么多个事件(返回值里)
+        ////epoll_wait第三个参数maxevents的值不能大于大于epoll_create时的size
+        //int events = epoll_wait(epollHandle, sEvents, NGX_MAX_EVENTS, -1);
+        //if (events == -1)
+        //{
+        //    //有错误发生，发送某个信号给本进程就可以导致这个条件成立，而且错误码根据观察是4
+        //    //#define EINTR 4，EINTR错误的产生：当阻塞于某个慢系统调用的一个进程捕获某个
+        //    //信号且相应信号处理函数返回时，该系统调用可能返回一个EINTR错误。
+        //    //例如：在socket服务器端，设置了信号捕获机制，有子进程，当在父进程阻塞于慢系统
+        //    //调用时由父进程捕获到了一个有效信号时，内核会致使accept返回一个EINTR错误
+        //    //(被中断的系统调用)。
+        //    if (errno == EINTR)
+        //    {
+        //        //信号所致，直接返回，一般认为这不是毛病，但还是打印下日志记录一下，
+        //        //因为一般也不会人为给worker进程发送消息
+        //        ngx_log_error_core(NGX_LOG_INFO, errno,
+        //            "In CSocket::ServerIOThread, func epoll_wait failed!");
+        //        //return 1;  //正常返回
+        //    }
+        //    else
+        //    {
+        //        //这被认为应该是有问题，记录日志
+        //        ngx_log_error_core(NGX_LOG_ALERT, errno,
+        //            "In CSocket::ServerIOThread, func epoll_wait failed!");
+        //        //return 0;  //非正常返回 
+        //    }
+        //}
+        //if (events == 0) //超时，但没事件来
+        //{
+        //    //无限等待，所以不存在超时，但却没返回任何事件，这应该不正常有问题        
+        //    ngx_log_error_core(NGX_LOG_ALERT, 0,
+        //        "In CSocket::ServerIOThread, func epoll_wait failed, "
+        //        "no timeout and no event!");
+        //   //return 0; //非正常返回 
+        //}
+        ////走到这里，就是属于有事件收到了
+        //lpngx_connection_t p_Conn;
+        //uintptr_t          instance;
+        //uint32_t           revents;
+        //for (int i = 0; i < events; ++i) //注意events才是返回的实际事件数量
+        //{
+        //    p_Conn = (lpngx_connection_t)(sEvents[i].data.ptr);
+        //    instance = (uintptr_t)p_Conn & 1; //将地址的最后一位取出来，用instance变量
+        //                                      //标识，见ngx_epoll_oper_event，该值是当
+        //                                      //时随着连接池中的连接一起给进来的，取得的
+        //                                      //是你当时调用ngx_epoll_oper_event的时候，
+        //                                      //这个连接里边的instance变量的值
+        //    p_Conn = (lpngx_connection_t)((uintptr_t)p_Conn & (uintptr_t)~1);
+        //    //过滤过期事件1
+        //    if (p_Conn->fd == -1) //当关联一个连接池中的连接对象时，这个套接字值是要给到
+        //                   //p_Conn->fd；ngx_close_connection或ngx_recycle_connection
+        //                          //函数中会把文件p_Conn关闭，并且把p_Conn会被设置为-1
+        //    {
+        //        //假如用epoll_wait取得三个事件，处理第一个事件时，因为业务需要，我们把这个
+        //        //连接关闭，p_Conn->fd会被设置为-1；第二个事件照常处理；假如第三个事件也跟
+        //        //第一个事件对应的是同一个连接，那这个条件就成立；这属于过期事件，不处理
+        //        ngx_log_error_core(NGX_LOG_DEBUG, 0,
+        //            "In CSocket::ServerIOThread, "
+        //            "an expiration event was encountered, fd==-1:%p.", p_Conn);
+        //        continue;
+        //    }
+        //    //过滤过期事件的2
+        //    if (p_Conn->instance != instance)
+        //    {
+        //        //instance标志判断事件是否过期
+        //        //a)处理第一个事件时，因为业务需要，我们把这个连接【假设套接字为50】关闭，
+        //        //  同时设置c->fd = -1；并且调用ngx_close_connection将该连接归还给连接池；
+        //        //b)处理第二个事件，恰好第二个事件是建立新连接事件，调用ngx_get_connection
+        //        //  从连接池中取出的连接非常可能就是刚刚释放的第一个事件对应的连接池中的连接；
+        //        //c)又因为a中套接字50被释放了，所以会被操作系统拿来复用，复用给了b)；
+        //        //d)当处理第三个事件时，第三个事件其实已经过期的，不应该处理，此时连接池中的
+        //        //该连接实际上已经被用作第二个事件对应的socket上了；依靠instance标志位能够
+        //        //解决这个问题，当调用ngx_get_connection从连接池中获取一个新连接时，我们把
+        //        //instance标志位置反。所以这个条件如果成立，说明这个连接已经关闭后又重启了
+        //        ngx_log_error_core(NGX_LOG_DEBUG, 0,
+        //            "In CSocket::ServerIOThread, "
+        //            "an expiration event was encountered, instance reset:%p.", p_Conn);
+        //        continue;
+        //    } //注意：过滤过期事件的2用于即关即用型连接池的过期事件判断，保留当学习
+        //    //能走到这里，这些事件都没过期，就正常开始处理
+        //    revents = sEvents[i].events; //取出事件类型
+        //    /*
+        //    if (revents & (EPOLLERR | EPOLLHUP)) //例如对方close掉套接字，这里会感应到
+        //                                   //换句话说：如果发生了错误或者客户端非正常断连
+        //    {
+        //        revents |= EPOLLIN | EPOLLOUT; //EPOLLIN：表示对应的链接上有数据可以读出，
+        //                                       //TCP链接的远端主动关闭连接，也相当于可
+        //                                       //读事件，因为本服务器要处理发送来的FIN包
+        //                                       //EPOLLOUT：表示对应的连接上可以写入数据
+        //                                       //发送写准备好
+        //    }*/
+        //    //if (revents & EPOLLRDHUP) //补充一个客户端正常关闭检测
+        //    //{
+        //    //    ngx_recycle_connection(p_Conn);
+        //    //}
+        //    if (revents & EPOLLIN) //如果是读事件
+        //    {
+        //        //一个客户端新连入，对端正常关闭，已连接的socket发送数据来，这个会成立           
+        //        (pCSocket->*(p_Conn->rhandler))(p_Conn); //所有连接均已连入，发送数据到这里，这里执行是 
+        //                                          //CSocket::ngx_read_request_handler
+        //    }
+        //    if (revents & EPOLLOUT) //如果是写事件
+        //    {
+        //        //客户端关闭，如果服务器端挂着一个写通知事件，则这里个条件是可能成立的
+        //        if (revents & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+        //        {
+        //            //EPOLLERR：对应的连接发生错误 8(1000) 
+        //            //EPOLLHUP：对应的连接被挂起 16(0001 0000)
+        //            //EPOLLRDHUP：表示TCP连接的远端关闭或者半关闭连接 8192(0010 0000 0000 0000)
+        //            //8221 = ‭0010 0000 0001 1101‬：包括EPOLLRDHUP，EPOLLHUP，EPOLLERR
+        //            ngx_log_stderr(errno, "In CSocekt::ServerIOThread, "
+        //                "EPOLLOUT set up and (EPOLLERR|EPOLLHUP|EPOLLRDHUP) set up, "
+        //                "event=%Xd.", revents);
+        //            pCSocket->ngx_recycle_connection(p_Conn);
+        //        }
+        //        else
+        //        {
+        //            //如果有数据没有发送完，由系统驱动来发送，CSocekt::ngx_write_request_handler
+        //            //其他情况则是，CSocekt::ngx_null_request_handler
+        //            (pCSocket->*(p_Conn->whandler))(p_Conn);
+        //        }
+        //    }
+        //}
+    
     }//end while
     return (void*)0;
 }

@@ -19,7 +19,7 @@
 //	int ngx_epoll_init();       
 //  int ngx_epoll_oper_event(int epollHandle, int fd, uint32_t eventtype, uint32_t flag, 
 //		int bcaction, lpngx_connection_t pConn);
-//	int ngx_epoll_process_events(int timer); 
+//	int EpollProcessIO(int timer); 
 
 class CLogicSocket : public CSocket   //继承自父类CScoekt
 {

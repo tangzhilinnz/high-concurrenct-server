@@ -1,0 +1,256 @@
+2020/08/26 21:53:02 [notice] PID_60372: master process./nginx  is up and running ......!
+2020/08/26 21:53:02 [info] PID_60373: Listening port80 succeeded!
+2020/08/26 21:53:03 [notice] PID_60373: worker process is up and running ......!
+2020/08/26 22:09:47 [notice] PID_74447: master process./nginx  is up and running ......!
+2020/08/26 22:09:47 [info] PID_74448: Listening port80 succeeded!
+2020/08/26 22:09:48 [notice] PID_74448: worker process is up and running ......!
+2020/08/29 23:49:25 [notice] PID_72872: master process./nginx  is up and running ......!
+2020/08/29 23:49:25 [info] PID_72873: Listening port80 succeeded!
+2020/08/29 23:49:26 [notice] PID_72873: worker process is up and running ......!
+2020/08/29 23:50:28 [notice] PID_73783: master process./nginx  is up and running ......!
+2020/08/29 23:50:28 [info] PID_73784: Listening port80 succeeded!
+2020/08/29 23:50:29 [notice] PID_73784: worker process is up and running ......!
+2020/08/30 00:05:39 [notice] PID_73783: signal 17 (SIGCHLD) sended from 73784
+2020/08/30 00:05:39 [alert] PID_73783: pid = 73784 exited on signal 11!
+2020/08/30 09:13:20 [notice] PID_7741: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 09:13:20 [info] PID_7742: Listening port80 succeeded!
+2020/08/30 09:13:21 [notice] PID_7742: worker process is up and running ......!
+2020/08/30 09:22:55 [info] PID_7742: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 09:22:55 [info] PID_7742: In CSocket::ServerIOThread, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 09:22:55 [info] PID_7742: In CSocket::ServerIOThread, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 09:22:55 [info] PID_7742: In CSocket::ServerIOThread, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 09:22:55 [notice] PID_7741: signal 17 (SIGCHLD) sended from 7742
+2020/08/30 09:22:55 [alert] PID_7741: pid = 7742 exited on signal 11!
+2020/08/30 09:33:27 [notice] PID_24575: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 09:33:27 [info] PID_24576: Listening port80 succeeded!
+2020/08/30 09:33:28 [notice] PID_24576: worker process is up and running ......!
+2020/08/30 09:35:47 [notice] PID_24575: signal 17 (SIGCHLD) sended from 24576
+2020/08/30 09:35:47 [alert] PID_24575: pid = 24576 exited on signal 9!
+2020/08/30 09:36:27 [notice] PID_27164: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 09:36:27 [info] PID_27165: Listening port80 succeeded!
+2020/08/30 09:36:29 [notice] PID_27165: worker process is up and running ......!
+2020/08/30 09:37:00 [notice] PID_27164: signal 17 (SIGCHLD) sended from 27165
+2020/08/30 09:37:00 [alert] PID_27164: pid = 27165 exited on signal 9!
+2020/08/30 09:37:23 [notice] PID_27951: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 09:37:23 [info] PID_27952: Listening port80 succeeded!
+2020/08/30 09:37:24 [notice] PID_27952: worker process is up and running ......!
+2020/08/30 09:45:42 [notice] PID_27951: signal 17 (SIGCHLD) sended from 27952
+2020/08/30 09:45:42 [alert] PID_27951: pid = 27952 exited on signal 9!
+2020/08/30 09:57:50 [notice] PID_45143: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 09:57:50 [info] PID_45144: Listening port80 succeeded!
+2020/08/30 09:57:52 [notice] PID_45144: worker process is up and running ......!
+2020/08/30 09:59:14 [notice] PID_45143: signal 17 (SIGCHLD) sended from 45144
+2020/08/30 09:59:14 [alert] PID_45143: pid = 45144 exited on signal 9!
+2020/08/30 09:59:36 [notice] PID_46649: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 09:59:36 [info] PID_46650: Listening port80 succeeded!
+2020/08/30 09:59:37 [notice] PID_46650: worker process is up and running ......!
+2020/08/30 11:06:53 [info] PID_46650: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 11:06:53 [info] PID_46650: In CSocket::ServerIOThread, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 11:06:53 [notice] PID_46649: signal 17 (SIGCHLD) sended from 46650
+2020/08/30 11:06:53 [alert] PID_46649: pid = 46650 exited on signal 11!
+2020/08/30 11:07:27 [notice] PID_103414: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 11:07:27 [info] PID_103415: Listening port80 succeeded!
+2020/08/30 11:07:28 [notice] PID_103415: worker process is up and running ......!
+2020/08/30 11:11:08 [info] PID_103415: In CSocket::ServerIOThread, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 11:11:08 [notice] PID_103414: signal 17 (SIGCHLD) sended from 103415
+2020/08/30 11:11:08 [alert] PID_103414: pid = 103415 exited on signal 11!
+2020/08/30 11:52:09 [notice] PID_10380: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 11:52:09 [info] PID_10381: Listening port80 succeeded!
+2020/08/30 11:52:10 [notice] PID_10381: worker process is up and running ......!
+2020/08/30 12:09:18 [notice] PID_10380: signal 17 (SIGCHLD) sended from 10381
+2020/08/30 12:09:18 [alert] PID_10380: pid = 10381 exited on signal 11!
+2020/08/30 12:09:51 [notice] PID_25245: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 12:09:51 [info] PID_25246: Listening port80 succeeded!
+2020/08/30 12:09:52 [notice] PID_25246: worker process is up and running ......!
+2020/08/30 12:23:33 [notice] PID_25245: signal 17 (SIGCHLD) sended from 25246
+2020/08/30 12:23:33 [alert] PID_25245: pid = 25246 exited on signal 11!
+2020/08/30 12:24:04 [notice] PID_37156: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 12:24:05 [info] PID_37157: Listening port80 succeeded!
+2020/08/30 12:24:06 [notice] PID_37157: worker process is up and running ......!
+2020/08/30 12:29:55 [notice] PID_37156: signal 17 (SIGCHLD) sended from 37157
+2020/08/30 12:29:55 [alert] PID_37156: pid = 37157 exited on signal 9!
+2020/08/30 12:30:22 [notice] PID_42440: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 12:30:22 [info] PID_42441: Listening port80 succeeded!
+2020/08/30 12:30:23 [notice] PID_42441: worker process is up and running ......!
+2020/08/30 12:36:22 [notice] PID_42440: signal 17 (SIGCHLD) sended from 42441
+2020/08/30 12:36:22 [alert] PID_42440: pid = 42441 exited on signal 8!
+2020/08/30 12:36:40 [notice] PID_47726: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 12:36:40 [info] PID_47727: Listening port80 succeeded!
+2020/08/30 12:36:41 [notice] PID_47727: worker process is up and running ......!
+2020/08/30 12:44:18 [notice] PID_47726: signal 17 (SIGCHLD) sended from 47727
+2020/08/30 12:44:18 [alert] PID_47726: pid = 47727 exited on signal 9!
+2020/08/30 12:44:41 [notice] PID_54484: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 12:44:41 [info] PID_54485: Listening port80 succeeded!
+2020/08/30 12:44:42 [notice] PID_54485: worker process is up and running ......!
+2020/08/30 12:49:32 [info] PID_54485: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/08/30 12:49:32 [notice] PID_54484: signal 17 (SIGCHLD) sended from 54485
+2020/08/30 12:49:32 [alert] PID_54484: pid = 54485 exited on signal 11!
+2020/08/30 12:49:55 [notice] PID_58857: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 12:49:55 [info] PID_58858: Listening port80 succeeded!
+2020/08/30 12:49:56 [notice] PID_58858: worker process is up and running ......!
+2020/08/30 12:52:30 [notice] PID_58857: signal 17 (SIGCHLD) sended from 58858
+2020/08/30 12:52:30 [alert] PID_58857: pid = 58858 exited on signal 8!
+2020/08/30 13:30:53 [notice] PID_93150: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 13:30:53 [info] PID_93151: Listening port80 succeeded!
+2020/08/30 13:30:54 [notice] PID_93151: worker process is up and running ......!
+2020/08/30 14:13:34 [notice] PID_93150: signal 17 (SIGCHLD) sended from 93151
+2020/08/30 14:13:34 [alert] PID_93150: pid = 93151 exited on signal 8!
+2020/08/30 14:13:54 [notice] PID_129107: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 14:13:54 [info] PID_129108: Listening port80 succeeded!
+2020/08/30 14:13:55 [notice] PID_129108: worker process is up and running ......!
+2020/08/30 14:18:02 [notice] PID_129107: signal 17 (SIGCHLD) sended from 129108
+2020/08/30 14:18:02 [alert] PID_129107: pid = 129108 exited on signal 8!
+2020/08/30 14:18:40 [notice] PID_2499: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 14:18:40 [info] PID_2500: Listening port80 succeeded!
+2020/08/30 14:18:41 [notice] PID_2500: worker process is up and running ......!
+2020/08/30 14:46:19 [notice] PID_2499: signal 17 (SIGCHLD) sended from 2500
+2020/08/30 14:46:19 [alert] PID_2499: pid = 2500 exited on signal 9!
+2020/08/30 14:46:43 [notice] PID_26145: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 14:46:43 [info] PID_26146: Listening port80 succeeded!
+2020/08/30 14:46:44 [notice] PID_26146: worker process is up and running ......!
+2020/08/30 14:51:06 [notice] PID_26145: signal 17 (SIGCHLD) sended from 26146
+2020/08/30 14:51:06 [alert] PID_26145: pid = 26146 exited on signal 8!
+2020/08/30 14:51:31 [notice] PID_30230: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 14:51:31 [info] PID_30231: Listening port80 succeeded!
+2020/08/30 14:51:32 [notice] PID_30231: worker process is up and running ......!
+2020/08/30 14:59:21 [notice] PID_30230: signal 17 (SIGCHLD) sended from 30231
+2020/08/30 14:59:21 [alert] PID_30230: pid = 30231 exited on signal 9!
+2020/08/30 15:08:24 [notice] PID_44401: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 15:08:24 [info] PID_44402: Listening port80 succeeded!
+2020/08/30 15:08:25 [notice] PID_44402: worker process is up and running ......!
+2020/08/30 15:09:37 [notice] PID_44401: signal 17 (SIGCHLD) sended from 44402
+2020/08/30 15:09:37 [alert] PID_44401: pid = 44402 exited on signal 8!
+2020/08/30 15:09:57 [notice] PID_45709: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 15:09:57 [info] PID_45710: Listening port80 succeeded!
+2020/08/30 15:09:58 [notice] PID_45710: worker process is up and running ......!
+2020/08/30 15:16:11 [notice] PID_45709: signal 17 (SIGCHLD) sended from 45710
+2020/08/30 15:16:11 [alert] PID_45709: pid = 45710 exited on signal 8!
+2020/08/30 15:16:27 [notice] PID_51154: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 15:16:27 [info] PID_51155: Listening port80 succeeded!
+2020/08/30 15:16:28 [notice] PID_51155: worker process is up and running ......!
+2020/08/30 15:25:58 [notice] PID_51154: signal 17 (SIGCHLD) sended from 51155
+2020/08/30 15:25:58 [alert] PID_51154: pid = 51155 exited on signal 8!
+2020/08/30 15:26:30 [notice] PID_59617: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 15:26:30 [info] PID_59618: Listening port80 succeeded!
+2020/08/30 15:26:31 [notice] PID_59618: worker process is up and running ......!
+2020/08/30 15:29:50 [notice] PID_59617: signal 17 (SIGCHLD) sended from 59618
+2020/08/30 15:29:50 [alert] PID_59617: pid = 59618 exited on signal 8!
+2020/08/30 15:30:22 [notice] PID_62920: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 15:30:22 [info] PID_62921: Listening port80 succeeded!
+2020/08/30 15:30:23 [notice] PID_62921: worker process is up and running ......!
+2020/08/30 16:13:26 [notice] PID_62920: signal 17 (SIGCHLD) sended from 62921
+2020/08/30 16:13:26 [alert] PID_62920: pid = 62921 exited on signal 8!
+2020/08/30 16:13:55 [notice] PID_99353: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 16:13:55 [info] PID_99354: Listening port80 succeeded!
+2020/08/30 16:13:56 [notice] PID_99354: worker process is up and running ......!
+2020/08/30 16:15:04 [notice] PID_99353: signal 17 (SIGCHLD) sended from 99354
+2020/08/30 16:15:04 [alert] PID_99353: pid = 99354 exited on signal 9!
+2020/08/30 16:15:31 [notice] PID_100761: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 16:15:31 [info] PID_100762: Listening port80 succeeded!
+2020/08/30 16:15:32 [notice] PID_100762: worker process is up and running ......!
+2020/08/30 16:30:11 [notice] PID_100761: signal 17 (SIGCHLD) sended from 100762
+2020/08/30 16:30:11 [alert] PID_100761: pid = 100762 exited on signal 9!
+2020/08/30 16:30:32 [notice] PID_113348: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 16:30:32 [info] PID_113349: Listening port80 succeeded!
+2020/08/30 16:30:33 [notice] PID_113349: worker process is up and running ......!
+2020/08/30 16:34:15 [notice] PID_116491: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 16:34:15 [info] PID_116492: Listening port80 succeeded!
+2020/08/30 16:34:16 [notice] PID_116492: worker process is up and running ......!
+2020/08/30 16:36:06 [notice] PID_118100: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 16:36:06 [info] PID_118101: Listening port80 succeeded!
+2020/08/30 16:36:07 [notice] PID_118101: worker process is up and running ......!
+2020/08/30 16:52:53 [notice] PID_1502: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 16:52:53 [info] PID_1503: Listening port80 succeeded!
+2020/08/30 16:52:54 [notice] PID_1503: worker process is up and running ......!
+2020/08/30 17:40:24 [notice] PID_41277: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 17:40:24 [info] PID_41278: Listening port80 succeeded!
+2020/08/30 17:40:25 [notice] PID_41278: worker process is up and running ......!
+2020/08/30 18:02:54 [notice] PID_60088: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 18:02:54 [info] PID_60089: Listening port80 succeeded!
+2020/08/30 18:02:55 [notice] PID_60089: worker process is up and running ......!
+2020/08/30 18:05:39 [notice] PID_62455: master process/mnt/hgfs/my_nginx/nginx  is up and running ......!
+2020/08/30 18:05:39 [info] PID_62456: Listening port80 succeeded!
+2020/08/30 18:05:40 [notice] PID_62456: worker process is up and running ......!
+2020/09/05 18:20:28 [notice] PID_11437: master process./nginx  is up and running ......!
+2020/09/05 18:20:28 [info] PID_11438: Listening port80 succeeded!
+2020/09/05 18:20:29 [notice] PID_11438: worker process is up and running ......!
+2020/09/05 18:26:17 [notice] PID_16316: master process./nginx  is up and running ......!
+2020/09/05 18:26:17 [info] PID_16317: Listening port80 succeeded!
+2020/09/05 18:26:19 [notice] PID_16317: worker process is up and running ......!
+2020/09/05 18:52:01 [notice] PID_37812: master process./nginx  is up and running ......!
+2020/09/05 18:52:01 [info] PID_37813: Listening port80 succeeded!
+2020/09/05 18:52:02 [notice] PID_37813: worker process is up and running ......!
+2020/09/06 14:05:05 [notice] PID_7931: master process./nginx  is up and running ......!
+2020/09/06 14:05:05 [info] PID_7932: Listening port80 succeeded!
+2020/09/06 14:05:06 [notice] PID_7932: worker process is up and running ......!
+2020/09/06 14:29:12 [notice] PID_28008: master process./nginx  is up and running ......!
+2020/09/06 14:29:12 [info] PID_28009: Listening port80 succeeded!
+2020/09/06 14:29:13 [notice] PID_28009: worker process is up and running ......!
+2020/09/06 14:38:25 [notice] PID_35811: master process./nginx  is up and running ......!
+2020/09/06 14:38:25 [info] PID_35812: Listening port80 succeeded!
+2020/09/06 14:38:26 [notice] PID_35812: worker process is up and running ......!
+2020/09/06 22:20:36 [notice] PID_35812: signal 15 (SIGTERM) sended from 1
+2020/09/06 22:20:36 [notice] PID_35812: signal 1 (SIGHUP) sended from 1
+2020/09/06 22:20:36 [info] PID_35812: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/09/06 22:20:36 [notice] PID_35811: signal 15 (SIGTERM) sended from 1
+2020/09/06 22:20:36 [notice] PID_35811: signal 1 (SIGHUP) sended from 1
+2020/09/07 22:20:08 [notice] PID_5025: master process./nginx  is up and running ......!
+2020/09/07 22:20:08 [info] PID_5026: Listening port80 succeeded!
+2020/09/07 22:20:09 [notice] PID_5026: worker process is up and running ......!
+2020/09/07 23:14:08 [notice] PID_5026: signal 15 (SIGTERM) sended from 1
+2020/09/07 23:14:08 [notice] PID_5026: signal 1 (SIGHUP) sended from 1
+2020/09/07 23:14:08 [notice] PID_5025: signal 15 (SIGTERM) sended from 1
+2020/09/07 23:14:08 [notice] PID_5025: signal 1 (SIGHUP) sended from 1
+2020/09/07 23:14:08 [info] PID_5026: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/09/08 22:27:04 [notice] PID_7800: master process./nginx  is up and running ......!
+2020/09/08 22:27:04 [info] PID_7801: Listening port80 succeeded!
+2020/09/08 22:27:05 [notice] PID_7801: worker process is up and running ......!
+2020/09/08 22:29:28 [notice] PID_10009: master process./nginx  is up and running ......!
+2020/09/08 22:29:28 [info] PID_10010: Listening port80 succeeded!
+2020/09/08 22:29:29 [notice] PID_10010: worker process is up and running ......!
+2020/09/09 23:26:46 [notice] PID_61443: master process./nginx  is up and running ......!
+2020/09/09 23:26:46 [info] PID_61444: Listening port80 succeeded!
+2020/09/09 23:26:47 [notice] PID_61444: worker process is up and running ......!
+2020/09/09 23:28:42 [notice] PID_63318: master process./nginx  is up and running ......!
+2020/09/09 23:28:42 [info] PID_63319: Listening port80 succeeded!
+2020/09/09 23:28:43 [notice] PID_63319: worker process is up and running ......!
+2020/09/09 23:47:05 [notice] PID_63319: signal 15 (SIGTERM) sended from 1
+2020/09/09 23:47:05 [notice] PID_63319: signal 1 (SIGHUP) sended from 1
+2020/09/09 23:47:05 [info] PID_63319: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/09/09 23:47:05 [notice] PID_63318: signal 15 (SIGTERM) sended from 1
+2020/09/09 23:47:05 [notice] PID_63318: signal 1 (SIGHUP) sended from 1
+2020/09/12 22:39:13 [notice] PID_87314: master process./nginx  is up and running ......!
+2020/09/12 22:39:13 [info] PID_87315: Listening port80 succeeded!
+2020/09/12 22:39:14 [notice] PID_87315: worker process is up and running ......!
+2020/09/12 22:57:30 [notice] PID_102680: master process./nginx  is up and running ......!
+2020/09/12 22:57:30 [info] PID_102681: Listening port80 succeeded!
+2020/09/12 22:57:32 [notice] PID_102681: worker process is up and running ......!
+2020/09/12 23:09:00 [notice] PID_112382: master process./nginx  is up and running ......!
+2020/09/12 23:09:00 [info] PID_112383: Listening port80 succeeded!
+2020/09/12 23:09:02 [notice] PID_112383: worker process is up and running ......!
+2020/09/12 23:34:58 [notice] PID_3589: master process./nginx  is up and running ......!
+2020/09/12 23:34:58 [info] PID_3590: Listening port80 succeeded!
+2020/09/12 23:34:59 [notice] PID_3590: worker process is up and running ......!
+2020/09/12 23:48:23 [notice] PID_14670: master process./nginx  is up and running ......!
+2020/09/12 23:48:23 [info] PID_14671: Listening port80 succeeded!
+2020/09/12 23:48:24 [notice] PID_14671: worker process is up and running ......!
+2020/09/13 00:03:29 [notice] PID_27310: master process./nginx  is up and running ......!
+2020/09/13 00:03:29 [info] PID_27311: Listening port80 succeeded!
+2020/09/13 00:03:31 [notice] PID_27311: worker process is up and running ......!
+2020/09/13 00:04:56 [notice] PID_28770: master process./nginx  is up and running ......!
+2020/09/13 00:04:56 [info] PID_28771: Listening port80 succeeded!
+2020/09/13 00:04:57 [notice] PID_28771: worker process is up and running ......!
+2020/09/13 00:14:26 [notice] PID_36863: master process./nginx  is up and running ......!
+2020/09/13 00:14:26 [info] PID_36864: Listening port80 succeeded!
+2020/09/13 00:14:27 [notice] PID_36864: worker process is up and running ......!
+2020/09/13 00:22:02 [notice] PID_36864: signal 15 (SIGTERM) sended from 1
+2020/09/13 00:22:02 [notice] PID_36864: signal 1 (SIGHUP) sended from 1
+2020/09/13 00:22:02 [info] PID_36864: In CSocket::EpollProcessIO, func epoll_wait failed! (4: Interrupted system call) 
+2020/09/13 00:22:02 [notice] PID_36863: signal 15 (SIGTERM) sended from 1
+2020/09/13 00:22:02 [notice] PID_36863: signal 1 (SIGHUP) sended from 1
+2020/09/13 19:02:05 [notice] PID_5386: master process./nginx  is up and running ......!
+2020/09/13 19:02:05 [notice] PID_5386: signal 17 (SIGCHLD) sended from 5387
+2020/09/13 19:02:05 [notice] PID_5386: pid = 5387 exited with code 254!
+2020/09/13 19:02:19 [notice] PID_5608: master process./nginx  is up and running ......!
+2020/09/13 19:02:19 [info] PID_5609: Listening port80 succeeded!
+2020/09/13 19:02:21 [notice] PID_5609: worker process is up and running ......!

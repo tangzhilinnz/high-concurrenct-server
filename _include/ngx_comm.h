@@ -15,8 +15,9 @@
 								//包头校验状态
 //一条消息被成功放到消息队列，则处理后直接回到_PKG_HD_INIT状态
 
-#define _PKG_HEADER_BUFSIZE  200 //因为我要先收包头，定义一个固定大小的数组专门用来
-							//收包头，这个数字大小一定要大于sizeof(COMM_PKG_HEADER)
+#define _PKG_HEADER_BUFSIZE  sizeof(COMM_PKG_HEADER) + 10 /*200*/
+//因为我要先收包头，定义一个固定大小的数组专门用来
+//收包头，这个数字大小一定要大于sizeof(COMM_PKG_HEADER)
 
 //结构定义--------------------------------------------------------------------------------
 #pragma pack (1) //对齐方式，1字节对齐(结构之间成员不做任何字节对齐：紧密排列)
@@ -37,5 +38,14 @@ typedef struct _COMM_PKG_HEADER
 }COMM_PKG_HEADER, *LPCOMM_PKG_HEADER;
 
 #pragma pack() //取消指定对齐，恢复缺省对齐
+
+//用于表示连接的事件类型
+enum eventConnType
+{
+	E_CLOSE_CONN = 0, //关闭连接事件
+	//E_RECYLE_CONN,    //回收连接事件
+
+	E_MAX_TYPE,		  //连接事件的总数
+};
 
 #endif

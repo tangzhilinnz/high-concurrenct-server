@@ -9,13 +9,11 @@
 #include "ngx_c_crc32.h"
 #include "mem_pool.h"
 #include "TimeWheel.h"
-//#include "tzmalloc.h"
 
 // 一些比较通用的定义放在这里
 //一些全局变量的外部声明也放在这里
 
-//类型定义--------------------------------------------------------------------------------
-
+//类型定义
 
 //用于存放从配置文件nginx.conf读取的item
 typedef struct _CConfItem

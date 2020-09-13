@@ -19,7 +19,7 @@
 #include "ngx_func.h"
 #include "ngx_c_socket.h"
 
-//建立新连接专用函数，当新连接进入时，本函数会被ngx_epoll_process_events所调用，
+//建立新连接专用函数，当新连接进入时，本函数会被EpollProcessIO所调用，
 //函数的参数pConnL是一个和监听socket关联的连接对象
 void 
 CSocket::ngx_event_accept(lpngx_connection_t pConnL)
@@ -217,7 +217,7 @@ CSocket::ngx_event_accept(lpngx_connection_t pConnL)
             }
         }
 
-        newc->listening = pConnL->listening; //连接对象和监听对象关联，方便通过连接对          
+        newc->listening = pConnL->listening; //连接对象和监听对象关联       
 
         //设置数据来时的读处理函数
         newc->rhandler = &CSocket::ngx_read_request_handler;
